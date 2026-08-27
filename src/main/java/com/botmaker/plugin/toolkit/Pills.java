@@ -55,6 +55,25 @@ public final class Pills {
         return Styles.on(new MenuButton(label), Styles.PILL);
     }
 
+    /**
+     * A pill with no menu at all — one label, one action, taken on the click.
+     *
+     * <p>The right shape when there is genuinely only one thing to do with the value: open the picture
+     * chooser, open the library browser. A menu of one entry makes the user click twice to reach the only
+     * destination there was, and reads as though something has been hidden from them.
+     *
+     * <p>It is a {@link Button} and not a {@link MenuButton} so it carries no disclosure arrow, and it takes
+     * the same {@link Styles#PILL} class, so a slot holding one of these sits in the block at the same size
+     * and weight as a slot holding a menu pill beside it.
+     */
+    public static Button button(String label, Runnable onPressed) {
+        Button button = Styles.on(new Button(label), Styles.PILL);
+        button.setOnAction(e -> {
+            if (onPressed != null) onPressed.run();
+        });
+        return button;
+    }
+
     /** Rebuilds {@code button}'s entries from {@code items} each time it is opened, and hands it back. */
     public static MenuButton onOpen(MenuButton button, Supplier<List<MenuItem>> items) {
         button.setOnShowing(e -> {

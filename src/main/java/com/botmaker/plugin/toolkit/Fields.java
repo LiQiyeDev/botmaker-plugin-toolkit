@@ -8,11 +8,13 @@ import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
+import java.util.function.LongConsumer;
 
 /**
- * The two input controls an editor cannot get right by reaching for the JavaFX one directly.
+ * The input controls an editor cannot get right by reaching for the JavaFX one directly.
  *
  * <p>A plain {@link TextField} fires nothing useful: {@code setOnAction} catches Enter and misses the far
  * more common case of the user typing and clicking away, which is how a value gets silently lost. A plain
@@ -88,6 +90,60 @@ public final class Fields {
         HBox row = new HBox(6, slider, readout);
         row.setAlignment(Pos.CENTER_LEFT);
         return row;
+    }
+
+    /**
+     * A length of time as one box per unit — hours, minutes, seconds, milliseconds.
+     *
+     * <p>The control this replaced everywhere it appeared was one amount plus a unit dropdown, and it could
+     * only ever say a multiple of a single unit: four and a half minutes had to be entered as 270 seconds, and
+     * anything that did not divide evenly came back as a raw millisecond count. Four boxes cost three more
+     * widgets and remove the arithmetic.
+     *
+     * <p>{@code onChange} fires on every keystroke with the running total. Anything unreadable in a box counts
+     * as zero and never as a throw, which is {@link Values}' rule — a half-typed number is a normal state of a
+     * box someone is still typing in.
+     *
+     * <p><b>No preview label.</b> Spelling a total back out — {@code 4h30m}, {@code 1m30s} — is the caller's,
+     * because the caller is the one that has to store it, and a preview that disagreed with what was written
+     * would be worse than no preview at all.
+     */
+    public static HBox duration(long millis, LongConsumer onChange) {
+        long total = Math.max(0L, millis);
+        TextField hours = unit("h", total / 3_600_000L);
+        TextField minutes = unit("m", total / 60_000L % 60);
+        TextField seconds = unit("s", total / 1000L % 60);
+        TextField ms = unit("ms", total % 1000L);
+
+        HBox row = new HBox(6);
+        row.setAlignment(Pos.CENTER_LEFT);
+        Runnable report = () -> {
+            if (onChange != null) {
+                onChange.accept(whole(hours) * 3_600_000L + whole(minutes) * 60_000L
+                                + whole(seconds) * 1000L + whole(ms));
+            }
+        };
+        for (TextField field : List.of(hours, minutes, seconds, ms)) {
+            field.textProperty().addListener((obs, was, now) -> report.run());
+            row.getChildren().addAll(field, Styles.on(new Label(field.getPromptText()), Styles.CAPTION));
+        }
+        return row;
+    }
+
+    private static TextField unit(String suffix, long value) {
+        TextField field = Styles.on(new TextField(Long.toString(value)), Styles.INSET_FIELD);
+        field.setPromptText(suffix);
+        field.setPrefColumnCount(suffix.length() > 1 ? 4 : 3);
+        return field;
+    }
+
+    /** What a box says as a whole number, floored at zero — see the note on {@link #duration}. */
+    private static long whole(TextField field) {
+        try {
+            return Math.max(0L, Long.parseLong(field.getText() == null ? "" : field.getText().trim()));
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     /** A whole number reads as one; anything else keeps two places, which is enough for every real knob. */
