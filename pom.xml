@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      groupId is com.github.LiQiyeDev for the same reason as every other published module: JitPack serves
+      this repo as com.github.LiQiyeDev:botmaker-plugin-toolkit:<tag> whatever this pom says, so matching it
+      here makes the reactor GAV identical to the published GAV. The version is cosmetic.
+    -->
+    <groupId>com.github.LiQiyeDev</groupId>
+    <artifactId>botmaker-plugin-toolkit</artifactId>
+    <version>0.0.0-SNAPSHOT</version>
+
+    <name>BotMaker Plugin Widget Toolkit</name>
+    <description>
+        The widgets a BotMaker Studio plugin would otherwise hand-roll before it could write its first slot
+        editor: a summary pill, a themed numbers dialog, a bounded number, a committing field and a
+        thumbnail chooser, each built from the contract's ValueContext.
+    </description>
+
+    <!--
+      THIS MODULE IS THE PLUGIN'S DEPENDENCY, NOT THE HOST'S. Studio never has it on its classpath. A plugin
+      declares it at `compile` scope and it is resolved onto that plugin's own classloader, which is what
+      makes two plugins on two toolkit versions a non-event. Do not add it to botmaker-studio.
+
+      It is separate from botmaker-studio-api because the contract is interfaces and records with no
+      implementation and must be allowed to version SLOWLY, while a widget kit is nothing but implementation
+      and will not. Keeping them apart is what lets a plugin take a new toolkit without taking a new
+      contract.
+
+      Unlike botmaker-studio-api and botmaker-plugin-processor, this module DOES pin a BotMaker upstream, so
+      it carries the two things they refuse: a .deps.env (written by the umbrella release.sh, sourced by
+      jitpack.yml) and flatten-maven-plugin, which is what makes the -D-injected version reach the published
+      pom at all — Maven publishes the committed pom, not the effective one.
+    -->
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <javafx.version>21</javafx.version>
+        <junit.version>5.10.2</junit.version>
+        <!-- The reactor/offline value. jitpack.yml injects the released tag from .deps.env at build time. -->
+        <botmaker.studioapi.version>0.0.0-SNAPSHOT</botmaker.studioapi.version>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!--
+          The contract, at `provided` scope. A plugin using this toolkit necessarily has it already — it
+          implements StudioPlugin — so bringing a second copy in transitively could only ever pit two
+          versions of the same interfaces against each other. Same reasoning as javafx-controls below and as
+          the contract's own JavaFX dependency.
+        -->
+        <dependency>
+            <groupId>com.github.LiQiyeDev</groupId>
+            <artifactId>botmaker-studio-api</artifactId>
+            <version>${botmaker.studioapi.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+
+            <!--
+              Bakes ${botmaker.studioapi.version} into the pom that is installed and published. Without it a
+              -D on the command line changes what THIS build resolves and nothing about what a plugin
+              resolving this toolkit from JitPack sees — which is exactly the 0.0.0-SNAPSHOT bug that shipped
+              in every SDK up to v1.0.24.
+
+              flattenMode=oss with <repositories>keep</repositories>: oss strips the jitpack repository
+              declaration otherwise, and a consumer resolving a com.github.LiQiyeDev artifact needs it.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <configuration>
+                    <flattenMode>oss</flattenMode>
+                    <pomElements>
+                        <repositories>keep</repositories>
+                    </pomElements>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
