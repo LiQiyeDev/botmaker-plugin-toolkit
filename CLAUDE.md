@@ -18,8 +18,23 @@ reason there are two modules:
 A plugin takes a new toolkit without taking a new contract. That is the property to protect; if a change
 here would force the contract to move with it, the change is in the wrong module.
 
-**It is the PLUGIN's dependency, never the host's.** `botmaker-studio` must not list it. Two plugins are
-entitled to two toolkit versions on two classloaders, and the moment Studio resolves one, they are not.
+**It is the PLUGIN's dependency, and the host resolving a copy of its own is not the disaster this
+paragraph used to claim (corrected 2026-08-28).** What stood here was *"`botmaker-studio` must not list it.
+Two plugins are entitled to two toolkit versions on two classloaders, and the moment Studio resolves one,
+they are not."* The second sentence is **false**, and it is worth knowing why before anybody restores it:
+`PluginLoader` is parent-first only for `com.botmaker.plugin.api.**` and the platform namespaces, so the
+toolkit is resolved **child-first** — a plugin carrying its own copy still gets its own, and the host's is
+the fallback for a plugin that brings none.
+
+The rule mattered anyway, and the platform broke it against itself: Studio's plugin #1 is the SDK, whose
+`SdkPlugin` extends `AbstractStudioPlugin` through a dependency the SDK declares `optional` — so not
+transitive, so Studio's classpath had no toolkit at all, so `ServiceLoader` threw `NoClassDefFoundError`
+while constructing the only plugin Studio ships and **Studio ran with an empty palette**. Studio now carries
+the toolkit at **`runtime`** scope. The rule that replaced the old one: *whoever puts a plugin on a
+classpath supplies what that plugin needs.*
+
+What survives of it, and is enforced: **no Studio source may name a `com.botmaker.plugin.toolkit` type.**
+The `runtime` scope means javac cannot see one, and `StudioSourcesTest` refuses a widening to `compile`.
 
 ## What is in here, after the 2026-08-28 lift
 
@@ -33,17 +48,24 @@ the lift out of the SDK, five more that are not widgets at all:
 | `Codecs` | `ValueCodec`s from lambdas, plus `or` (total) and `seeded` | three one-line answers should not cost eleven lines of anonymous class per type |
 | `AbstractStudioPlugin` | the four contributions, each built once on first use | the build hooks **cannot be fields**: `ServiceLoader` constructs a plugin while a project is opening |
 | `testing.TestContexts` | a recording `SlotContext`/`ValueContext` | a plugin author could not unit-test an editor without writing this first, so the predicate half went untested |
+| `Source` (2026-08-28) | Java source: a string literal, a char, a number, a constructor, a static call | a plugin emits Java whether it means to or not — `ValueCodec.literal` and every slot write — and this project already had three hand-rolled escapers, each of which stopped at the backslash and the quote |
 
 `Editors` gained `boundedPill` (a number with a range, in a dialog, committed on OK) and `flag` out of the
 same lift. **What did not move is the `Bound` table** naming `setDefaultConfidence` and what its range is —
 that is the SDK's knowledge about its own API, and it is the worked example of rule 4 below.
 
 **One thing that looks liftable and is not: the SDK's own `SdkValueTypes` still uses its private
-`codec(…)`/`seeded(…)` helpers rather than `Codecs`.** Not an oversight. `Authoring` reaches
-`SdkValueTypes.CATALOG` on Studio's *own* classpath — Studio depends on the SDK and **must not** depend on
-this module — so a toolkit class named from there would be a `NoClassDefFoundError` the first time anyone
-generated a project. The toolkit is a plugin's dependency; the SDK is a library *and* a plugin, and only its
-plugin half may name us.
+`codec(…)`/`seeded(…)` helpers rather than `Codecs`, and `LiteralWriter` keeps its own escaping rather than
+`Source`.** Not an oversight, and the reason **changed on 2026-08-28** without the conclusion changing. It
+used to be that Studio carried no toolkit, so a toolkit class named from `internal/authoring` — which
+`Authoring` reaches on Studio's *own* classpath — was a `NoClassDefFoundError` on the first project
+generation. Studio carries the toolkit at `runtime` now, so that crash is gone and the rule stands on
+stronger ground: **the SDK is a library *and* a plugin, and only its plugin half (`plugin/`,
+`internal/plugin/`) may name us.** A library half that reached for a plugin's widget kit would be unusable
+in every host that does not happen to bundle one — which is every host but Studio.
+
+So the ~15 lines `Source` and `LiteralWriter` have in common are **deliberate duplication**, and the SDK's
+copy carries a comment saying so.
 
 ## The three rules
 
@@ -71,13 +93,31 @@ stayed in the SDK. `Editors.NumberRange` passes because a *bounded number* is a 
 This is the acceptance test for every lift out of a plugin, and it is what stops this module becoming the
 SDK's second home. A widget that is generic only because its one caller happens to be generic is not generic.
 
-## Why there is no dependency here
+## The one dependency, and why the bar was met
 
-`botmaker-studio-api` and `javafx-controls`, both `provided`, and nothing else. ControlsFX was considered
-and declined: `PropertySheet` is a whole-form abstraction and these are bespoke single-value nodes, so it
-would sit unused beside them while every plugin that wanted a slider resolved it. If the toolbar or panel
-work later wants `PopOver` specifically, take the dependency **then**, with the need in hand — and know that
-it becomes every plugin's dependency, and its JavaFX compatibility becomes ours.
+`botmaker-studio-api` and `javafx-controls` are `provided` — a plugin has both already. **The only
+dependency a plugin actually resolves through this module is JavaPoet**
+(`com.palantir.javapoet:javapoet`, one 106 KB jar with none of its own), added 2026-08-28 for `Source`.
+
+The bar it had to clear is the one this section has always stated: *it becomes every plugin's dependency,
+and its compatibility becomes ours.* What cleared it is that **a plugin writes Java whether it means to or
+not** — `ValueCodec.literal` returns Java source and `Slots.write` writes an expression into a bot's file —
+so the choice was never "a dependency or nothing", it was "one implementation or a hand-rolled escaper per
+plugin". This project had already written three of those (here, in the SDK, and in the generated skeleton),
+and each of them escaped the backslash and the quote and stopped, so a pasted tab produced a slot that would
+not compile.
+
+**`Source.string` is the one member JavaPoet does not implement**, and that is pinned by a test rather than
+left to be rediscovered: `$S` splits a string containing a newline into a concatenation *across source
+lines*, which is right for a generated file and wrong for a slot, where the host writes the result into the
+middle of an existing line. The structural members (`newInstance`, `call`, `type`) are JavaPoet's, and
+**no JavaPoet type appears in a signature here** — so a plugin's own compile is unaffected by which library
+is behind it, and the library can be replaced without breaking anybody.
+
+ControlsFX was considered and declined on the same bar and did not clear it: `PropertySheet` is a whole-form
+abstraction and these are bespoke single-value nodes, so it would sit unused beside them while every plugin
+that wanted a slider resolved it. If the toolbar or panel work later wants `PopOver` specifically, take the
+dependency **then**, with the need in hand.
 
 ## Why it flattens and the other two plugin-facing modules do not
 
@@ -102,11 +142,13 @@ mistake it exists to prevent — that a bare `TextField` loses edits made by cli
 ## Building
 
 ```bash
-mvn test        # ValuesTest (7) — the only behaviour assertable without a JavaFX toolkit
+mvn test        # ValuesTest, CallSitesTest, SourceTest (29) — what is assertable with no JavaFX toolkit
 mvn install     # com.github.LiQiyeDev:botmaker-plugin-toolkit:0.0.0-SNAPSHOT
 ```
 
-Do not add a test that asserts a builder returned non-null; a compile proves that. What is worth holding is
+Do not add a test that asserts a builder returned non-null; a compile proves that. `SourceTest` is the
+other kind worth having: its output is compiled by **somebody else's** build, so a wrong escape is a
+compile error in a bot, reported against a line its author never wrote. What is worth holding is
 in `ValuesTest`: every case there is a real state a project file reaches, and in every one the answer is a
 default rather than an exception.
 

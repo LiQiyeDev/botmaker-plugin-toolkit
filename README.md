@@ -48,19 +48,31 @@ as a `ValueContext`.
 | `Values` | reading the `List<String>` a value arrives as. Degrades, never throws. |
 | `Styles` | the host's style-class names, as constants. |
 | `Thumbnail` | one cell of a picture chooser. |
+| `Slots` | reading and writing a value that is a Java expression in a slot and stored text in a row. |
+| `CallSites` | predicates for an editor chosen by the *call* around a value rather than by its type. |
+| `Codecs` | `ValueCodec`s from lambdas, with `or` to make a partial parser total. |
+| `Source` | Java source, spelled correctly: a string literal, a char, a number, a constructor, a call. |
+| `AbstractStudioPlugin` | a `StudioPlugin` that builds each contribution once, on first use. |
+| `testing.TestContexts` | a recording context, so an editor **and its predicate** can be unit-tested. |
+
+`Source` is the one to reach for without being asked: a `ValueCodec`'s third function returns the Java
+literal a bot will compile, and a hand-rolled escaper that stops at the backslash and the quote turns a
+pasted tab into a compile error in somebody else's project.
 
 ## What is deliberately not in it
 
-- **No third-party UI dependency.** Nothing transitive reaches your plugin.
-- **No form or validation layer.** These six were extracted from the host's own pickers because they
-  recurred; a seventh is worth adding the day a second editor wants it, not before.
-- **No annotation processing.** That is `botmaker-plugin-processor`, which depends on nothing at all and
-  goes on `<annotationProcessorPaths>` rather than in `<dependencies>`.
+- **No UI dependency.** ControlsFX was weighed and declined — `PropertySheet` is a whole-form abstraction
+  and these are bespoke single-value nodes.
+- **One dependency total, and it is not a widget:** JavaPoet, behind `Source`, resolved onto your plugin's
+  classpath. No JavaPoet type appears in a signature here, so it is an implementation detail you may ignore
+  or use directly as you like.
+- **No form or validation layer.** These were extracted from the host's own pickers because they recurred;
+  the next one is worth adding the day a second editor wants it, not before.
 
 ## Building
 
 ```bash
-mvn test        # ValuesTest (7)
+mvn test        # ValuesTest, CallSitesTest, SourceTest (29)
 mvn install     # com.github.LiQiyeDev:botmaker-plugin-toolkit:0.0.0-SNAPSHOT
 ```
 

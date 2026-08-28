@@ -142,10 +142,15 @@ public final class Slots {
         return null;
     }
 
-    /** {@code text} as a Java string literal, quotes and backslashes escaped. */
+    /**
+     * {@code text} as a Java string literal.
+     *
+     * <p>Kept under this name because it is where every editor already reaches for it; the escaping itself
+     * is {@link Source#string}, which is total — this used to escape the backslash and the quote and
+     * nothing else, so a pasted tab or newline produced a slot that would not compile.
+     */
     public static String quote(String text) {
-        String s = text == null ? "" : text;
-        return '"' + s.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
+        return Source.string(text);
     }
 
     /**
@@ -162,12 +167,13 @@ public final class Slots {
             ctx.set(Values.of(numbers));
             return;
         }
-        StringBuilder expression = new StringBuilder("new ").append(type.getName()).append('(');
+        Object[] arguments = new Object[numbers.length];
         for (int i = 0; i < numbers.length; i++) {
-            if (i > 0) expression.append(", ");
-            expression.append(numbers[i]);
+            arguments[i] = numbers[i];
         }
-        slot.replaceWith(expression.append(')').toString(), type.getName());
+        // Source.type rather than getName(): a nested type is Outer.Inner in both an expression and an
+        // import, and Outer$Inner in neither.
+        slot.replaceWith(Source.newInstance(type, arguments), Source.type(type));
     }
 
     /**

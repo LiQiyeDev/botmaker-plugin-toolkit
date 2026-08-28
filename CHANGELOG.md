@@ -23,6 +23,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Parameters row, because a row has no call behind it.
 - **`Codecs`** — `ValueCodec`s from three lambdas, with `or` to make a partial parser total and `seeded` for
   a type whose starting value is a choice rather than a fallback.
+- **`Source`** — Java source, spelled correctly: a string literal, a char literal, a number as a person
+  would have typed it, a constructor, a static call and a qualified type name. A plugin emits Java whether
+  it means to or not — a `ValueCodec`'s third function returns the literal a bot compiles, and every slot
+  write is an expression — and this project had already written **three** hand-rolled escapers, each of
+  which escaped the backslash and the quote and stopped, so a pasted tab produced a slot that would not
+  compile. `Slots.quote` is now this, under its old name.
+  - **The first dependency this module resolves onto a plugin's classpath**: `com.palantir.javapoet:javapoet`
+    (the maintained fork; the original has had no release since 2021), one 106 KB jar with none of its own.
+    Taken deliberately against the standing rule that a dependency here becomes every plugin's — the choice
+    was never "a dependency or nothing", it was "one implementation or one hand-rolled escaper per plugin".
+  - **No JavaPoet type appears in a signature**, so the library is replaceable without breaking a plugin.
+  - **`Source.string` is the one member JavaPoet does not implement, and a test pins why**: `$S` splits a
+    string containing a newline into a concatenation *across source lines*, which is right for a generated
+    file and wrong for a slot — the host writes the result into the middle of an existing line, and one slot
+    holds one expression.
 - **`AbstractStudioPlugin`** — a `StudioPlugin` that builds each of its four contributions once, on first
   use, so nothing expensive runs in the constructor `ServiceLoader` calls while a project is opening.
 - **`testing.TestContexts`** — a recording `SlotContext`/`ValueContext` for unit-testing an editor and its

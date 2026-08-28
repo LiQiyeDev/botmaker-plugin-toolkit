@@ -41,6 +41,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <javafx.version>21</javafx.version>
         <junit.version>5.10.2</junit.version>
+        <javapoet.version>0.7.0</javapoet.version>
         <!-- The reactor/offline value. jitpack.yml injects the released tag from .deps.env at build time. -->
         <botmaker.studioapi.version>0.0.0-SNAPSHOT</botmaker.studioapi.version>
     </properties>
@@ -71,6 +72,23 @@
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
             <scope>provided</scope>
+        </dependency>
+
+        <!--
+          JavaPoet, and it is the FIRST dependency this module has ever had that a plugin actually resolves
+          — `compile` scope, so it becomes every plugin's transitive dependency and its compatibility
+          becomes ours. That is the standing warning in this module's CLAUDE.md, taken deliberately:
+          `Source` exists because a plugin emits Java whether it means to or not (a ValueCodec's literal, a
+          slot's expression), and this project already carried three hand-rolled copies of string escaping.
+          One jar, 106 KB, no transitive dependencies of its own.
+
+          com.palantir.javapoet, not com.squareup: the original has had no release since 1.13.0 in 2021 and
+          this is the maintained fork of it.
+        -->
+        <dependency>
+            <groupId>com.palantir.javapoet</groupId>
+            <artifactId>javapoet</artifactId>
+            <version>${javapoet.version}</version>
         </dependency>
 
         <dependency>

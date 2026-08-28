@@ -5,6 +5,34 @@ reasoning.
 
 ## Done
 
+### 2026-08-28 — `Source`, and the first dependency a plugin resolves through this module
+
+Part F, phase B. A plugin emits Java whether it means to or not: a `ValueCodec`'s third function returns the
+literal a bot will compile, and every slot write is an expression. Nothing owned that concern, so this
+project had written **three** escapers for it — `Slots.quote` here, `LiteralWriter.quote` in the SDK, and a
+private `quote` in the archetype's generated skeleton — and all three escaped the backslash and the quote
+and stopped, so a pasted tab or newline produced source that would not compile.
+
+- **`Source`** — `string`, `character`, `number` (a count reads as `3`, not `3.0`), `enumConstant`,
+  `newInstance`, `call`, `type`. `Slots.quote` is now `Source.string` under its old name, and
+  `Slots.writeConstructor` composes through `Source.newInstance` — which also fixed a nested type being
+  written `Outer$Inner`, legal in neither an expression nor an import.
+- **An argument is source, not a value.** `call(Sound.class, "play", string("ding"))`. The alternative — a
+  `String` argument meaning text — makes `call(X.class, "m", name)` ambiguous between a variable and a
+  literal, and only the caller knows which was meant.
+- **JavaPoet (`com.palantir.javapoet`, 106 KB, no transitive dependencies) is the implementation and never
+  the interface.** No JavaPoet type appears in a signature here, so it can be replaced without breaking a
+  plugin. Taken against this module's standing rule that a dependency becomes every plugin's: the choice was
+  never "a dependency or nothing", it was "one implementation or one hand-rolled escaper per plugin".
+- **`Source.string` is deliberately *not* JavaPoet's `$S`, and `SourceTest` pins why.** `$S` splits a string
+  containing a newline into a concatenation across source lines (`"a\n" + "b"`) — right for a generated
+  file, wrong for a slot, where the host writes the result into the middle of an existing line and one slot
+  holds one expression. Checked against the real library before the class was written, not assumed.
+- The SDK's `LiteralWriter` **keeps its own copy**, and it is now total the same way. The reason is the rule
+  rather than an oversight: only the SDK's plugin half may name the toolkit, and `internal/authoring` is
+  library code any host reaches. Written in both files so neither reads as a missed cleanup.
+- 29 tests (was 18).
+
 ### 2026-08-28 — the lift out of the SDK: five classes that were never SDK-specific
 
 Plugin-ecosystem plan, phase 4. The SDK carried ~1300 lines of plugin code, and a good deal of it was
