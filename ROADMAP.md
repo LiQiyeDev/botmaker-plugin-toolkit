@@ -5,6 +5,48 @@ reasoning.
 
 ## Done
 
+### 2026-08-28 — the lift out of the SDK: five classes that were never SDK-specific
+
+Plugin-ecosystem plan, phase 4. The SDK carried ~1300 lines of plugin code, and a good deal of it was
+host-plumbing any second plugin would have had to rewrite. Five classes moved and two editors were added; the
+acceptance test for each was the module's rule 4, *nothing here may name a plugin's vocabulary*.
+
+- **`Slots`** (189 lines, from `sdk/internal/plugin/editors`). Reads and writes a value that is a Java
+  expression in a slot and a row of stored strings in the Parameters window — the question
+  `ValueContext.asSlot()` exists to answer, asked here and as far as possible nowhere else. It was in the SDK
+  by accident of who wrote the first editor: not a line of it names an SDK type, and every editor that can
+  appear in source needs it.
+- **`CallSites`** — the four matcher shapes (`firstArgumentOf`, `argumentOf`, `firstArgumentWhere`,
+  `trailingArgumentOf`, plus a public `isOn`). The SDK keeps its five *constants*, which name `Game` and
+  `BotSettings` and are the part that is genuinely its own; its `CallSites` went from 99 lines to a table of
+  five. Every predicate declines a Parameters row, which is the half a plugin author never tests by hand
+  because every context in front of them while developing has a call in it.
+- **`Editors.boundedPill` + `Editors.flag` + `Editors.NumberRange`** — the pill, dialog, spinner-or-slider
+  division, clamping and label out of `SettingsEditors`, which is now the table and nothing else (172 → 84
+  lines). The split is exactly rule 4: a *bounded number* is a shape, and "`setDefaultConfidence` runs 0 to
+  1" is the SDK's knowledge about its own API.
+- **`AbstractStudioPlugin`** — the four contributions, each built once on first use. Honestly stated in its
+  own javadoc: this buys `SdkPlugin` almost nothing, since a `static final` catalog was already right there.
+  What it buys everyone else is that the build hooks **cannot be fields** — `ServiceLoader` constructs a
+  plugin while a project is opening, so reflecting over forty classes in a constructor happens on that path
+  whether the answer is ever wanted or not. `SdkPlugin`'s 52-facade `PaletteCatalog.of(…)` became
+  `buildCatalog()` for that reason and is genuinely lazier than it was.
+- **`Codecs`** — `ValueCodec`s from three lambdas, plus `or` (make a partial parser total) and `seeded`.
+  **The SDK deliberately does not use it**, and the reason is worth carrying: `Authoring` reaches
+  `SdkValueTypes.CATALOG` on *Studio's own* classpath, and Studio must not depend on this module, so naming a
+  toolkit class from there would be a `NoClassDefFoundError` the first time anybody generated a project. The
+  SDK is a library *and* a plugin; only its plugin half may name us.
+- **`testing.TestContexts`** — a recording `SlotContext`/`ValueContext`, fluent, with `written()`,
+  `replacement()`, `enclosingReplacement()` and `writes()`. `writes() == 0` straight after building an editor
+  is the assertion for rule 3. It replaced 28 hand-rolled lines in `GeometryLabelTest` and 50 in
+  `DurationSourceTest`, which is the argument for it: a plugin author had to write those before they could
+  assert anything, and so generally did not.
+- **`CallSitesTest`**, 11 cases, covering all four shapes and — the point — both declines: a Parameters row,
+  and a slot with no call around it.
+
+Not moved, and worth knowing why: the SDK's five call-site constants, the `Bound` table, `WireText`, and
+anything else whose signature or name would have had to say "Steam" or "confidence".
+
 ### 2026-08-28 — a CI workflow, and a GitHub Release published by JReleaser
 
 - **`.github/workflows/ci.yml` — this repository's first workflow of any kind.** Three jobs: `build` on

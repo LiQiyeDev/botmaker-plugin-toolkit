@@ -1,0 +1,237 @@
+package com.botmaker.plugin.toolkit.testing;
+
+import com.botmaker.plugin.api.SlotContext;
+import com.botmaker.plugin.api.StudioServices;
+import com.botmaker.plugin.api.TypeRef;
+import com.botmaker.plugin.api.ValueContext;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Contexts a plugin's editors can be exercised against without a running Studio.
+ *
+ * <p>A {@code SlotEditor} is a predicate and a factory over a {@link ValueContext}, and both halves are worth
+ * a test: <em>does this predicate claim the calls I meant and decline the ones I did not</em>, and <em>does
+ * this factory build a node and write back what I expect</em>. Neither question needs a host, a project or a
+ * JavaFX thread — but until this class existed every plugin author had to write the two stubs first, which is
+ * enough friction that the predicate half generally went untested.
+ *
+ * <pre>{@code
+ * var ctx = TestContexts.slot("Game", "launchSteam", 0, "\"440\"");
+ * assertTrue(STEAM_APP_ID.test(ctx));
+ * assertFalse(STEAM_APP_ID.test(TestContexts.row("appId", "440")));
+ * }</pre>
+ *
+ * <h2>What is real and what is not</h2>
+ *
+ * <p>The value, the type, the call site and the writes are <b>real</b>: {@link Recording#written()} and
+ * {@link Recording#replacement()} return exactly what the editor asked for, so a test asserts on the string
+ * that would have reached the file. {@link ValueContext#services()} is <b>not</b>: it answers {@code null},
+ * because every one of those services is the host doing something a test has no way to fake — dragging a
+ * region on a real screen, owning a real window. An editor that reaches for one in a test fails with an NPE
+ * naming the line, which is the honest outcome; test that editor's <em>predicate</em> here and its dialog by
+ * hand.
+ *
+ * <p>Building a JavaFX control still needs the FX toolkit started. That is JavaFX's rule, not this class's:
+ * run those tests on an initialised toolkit, or keep to the predicates, which touch no control at all.
+ */
+public final class TestContexts {
+
+    private TestContexts() {}
+
+    /**
+     * A Parameters-window row: a value with a type and no call behind it.
+     *
+     * <p>{@link ValueContext#asSlot()} answers {@code null} here, which is the case every call-site predicate
+     * must decline — and the one most easily forgotten, because it is the case that cannot arise while an
+     * editor is being developed against a bot's source.
+     */
+    public static Recording row(String typeName, String... value) {
+        return new Recording(typeName, List.of(value), null, null, null, -1);
+    }
+
+    /**
+     * A slot in a bot's source, with the call around it.
+     *
+     * @param enclosingClass  the class the call is on, as the host resolved it — a simple or a qualified name
+     * @param enclosingMethod the method being called
+     * @param argIndex        which argument this slot is, counting from 0
+     * @param currentSource   the Java expression currently in the slot
+     */
+    public static Recording slot(String enclosingClass, String enclosingMethod, int argIndex,
+                                 String currentSource) {
+        return new Recording("", List.of(currentSource == null ? "" : currentSource),
+                currentSource, enclosingClass, enclosingMethod, argIndex);
+    }
+
+    /** A slot of a known type with no call around it — a field initialiser, a local declaration. */
+    public static Recording typedSlot(String typeName, String currentSource) {
+        return new Recording(typeName, List.of(currentSource == null ? "" : currentSource),
+                currentSource, null, null, -1);
+    }
+
+    /**
+     * A context that records what an editor writes instead of writing it anywhere.
+     *
+     * <p>It implements {@link SlotContext} in every case and lies about one thing only: {@link #asSlot()}
+     * answers {@code null} for a row, exactly as the host's own does. That is the single behaviour a
+     * call-site predicate turns on, so getting it right here is most of what this class is for.
+     */
+    public static final class Recording implements SlotContext {
+
+        private String typeName;
+        private final boolean isSlot;
+        private final String enclosingClass;
+        private final String enclosingMethod;
+        private final int argIndex;
+
+        private List<String> value;
+        private String currentSource;
+        private String replacement;
+        private final List<String> imports = new ArrayList<>();
+        private String enclosingReplacement;
+        private String enclosingSource;
+        private int writes;
+
+        private Recording(String typeName, List<String> value, String currentSource,
+                          String enclosingClass, String enclosingMethod, int argIndex) {
+            this.typeName = typeName == null ? "" : typeName;
+            this.value = List.copyOf(value);
+            this.currentSource = currentSource;
+            this.isSlot = currentSource != null;
+            this.enclosingClass = enclosingClass;
+            this.enclosingMethod = enclosingMethod;
+            this.argIndex = argIndex;
+        }
+
+        /**
+         * The declared type of the value, for a context built by {@link #slot} — which knows the call but not
+         * the type. A name with no dot in it answers only {@link TypeRef#simpleName()}, exactly as the host's
+         * own {@code TypeRef} does for a type it could not resolve.
+         */
+        public Recording withType(String typeName) {
+            this.typeName = typeName == null ? "" : typeName;
+            return this;
+        }
+
+        /** The source of the call this slot sits in, for an editor that reads it. Fluent, for setup. */
+        public Recording withEnclosingSource(String source) {
+            this.enclosingSource = source;
+            return this;
+        }
+
+        /** What {@link #set} was last given — the stored form, for a row. */
+        public List<String> written() {
+            return value;
+        }
+
+        /** What {@link #replaceWith} was last given — the Java expression, for a slot. */
+        public String replacement() {
+            return replacement;
+        }
+
+        /** The imports the last {@code replaceWith} asked for. */
+        public List<String> imports() {
+            return List.copyOf(imports);
+        }
+
+        /** What {@link #replaceEnclosingCall} was last given, or {@code null}. */
+        public String enclosingReplacement() {
+            return enclosingReplacement;
+        }
+
+        /**
+         * How many times the editor wrote anything.
+         *
+         * <p>Worth asserting is {@code 0} straight after building the editor: the toolkit's rule is that
+         * building never writes — not even to normalise what is already there — because a project merely
+         * opened and closed must come back byte-identical.
+         */
+        public int writes() {
+            return writes;
+        }
+
+        @Override
+        public TypeRef type() {
+            return new TypeRef() {
+                @Override
+                public String simpleName() {
+                    int dot = typeName.lastIndexOf('.');
+                    return dot < 0 ? typeName : typeName.substring(dot + 1);
+                }
+
+                @Override
+                public String qualifiedName() {
+                    return typeName.indexOf('.') < 0 ? "" : typeName;
+                }
+            };
+        }
+
+        @Override
+        public List<String> value() {
+            return value;
+        }
+
+        @Override
+        public void set(List<String> value) {
+            this.value = value == null ? List.of() : List.copyOf(value);
+            writes++;
+        }
+
+        /** Always {@code null}: every service is the host doing something a test cannot fake. */
+        @Override
+        public StudioServices services() {
+            return null;
+        }
+
+        @Override
+        public SlotContext asSlot() {
+            return isSlot ? this : null;
+        }
+
+        @Override
+        public String currentSource() {
+            return currentSource == null ? "" : currentSource;
+        }
+
+        @Override
+        public String enclosingClass() {
+            return enclosingClass;
+        }
+
+        @Override
+        public String enclosingMethod() {
+            return enclosingMethod;
+        }
+
+        @Override
+        public int argIndex() {
+            return argIndex;
+        }
+
+        @Override
+        public String enclosingSource() {
+            return enclosingSource;
+        }
+
+        @Override
+        public void replaceWith(String javaExpression, String... importsNeeded) {
+            this.replacement = javaExpression;
+            this.currentSource = javaExpression;
+            this.value = List.of(javaExpression == null ? "" : javaExpression);
+            this.imports.clear();
+            if (importsNeeded != null) this.imports.addAll(List.of(importsNeeded));
+            writes++;
+        }
+
+        @Override
+        public void replaceEnclosingCall(String javaExpression, String... importsNeeded) {
+            this.enclosingReplacement = javaExpression;
+            this.enclosingSource = javaExpression;
+            this.imports.clear();
+            if (importsNeeded != null) this.imports.addAll(List.of(importsNeeded));
+            writes++;
+        }
+    }
+}

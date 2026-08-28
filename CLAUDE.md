@@ -21,6 +21,30 @@ here would force the contract to move with it, the change is in the wrong module
 **It is the PLUGIN's dependency, never the host's.** `botmaker-studio` must not list it. Two plugins are
 entitled to two toolkit versions on two classloaders, and the moment Studio resolves one, they are not.
 
+## What is in here, after the 2026-08-28 lift
+
+Seven widget classes (`Editors`, `Pills`, `Fields`, `Modals`, `Values`, `Styles`, `Thumbnail`) and, since
+the lift out of the SDK, five more that are not widgets at all:
+
+| class | what it is | why it is here and not in a plugin |
+|---|---|---|
+| `Slots` | reads and writes a value that is Java source in a slot and stored text in a Parameters row | not a line of it named an SDK type; **every** editor that can sit in source needs it |
+| `CallSites` | the four matcher shapes for an editor chosen by the call around a value, not by its type | the matching is generic; the class and method **names** are the plugin's and stay there |
+| `Codecs` | `ValueCodec`s from lambdas, plus `or` (total) and `seeded` | three one-line answers should not cost eleven lines of anonymous class per type |
+| `AbstractStudioPlugin` | the four contributions, each built once on first use | the build hooks **cannot be fields**: `ServiceLoader` constructs a plugin while a project is opening |
+| `testing.TestContexts` | a recording `SlotContext`/`ValueContext` | a plugin author could not unit-test an editor without writing this first, so the predicate half went untested |
+
+`Editors` gained `boundedPill` (a number with a range, in a dialog, committed on OK) and `flag` out of the
+same lift. **What did not move is the `Bound` table** naming `setDefaultConfidence` and what its range is —
+that is the SDK's knowledge about its own API, and it is the worked example of rule 4 below.
+
+**One thing that looks liftable and is not: the SDK's own `SdkValueTypes` still uses its private
+`codec(…)`/`seeded(…)` helpers rather than `Codecs`.** Not an oversight. `Authoring` reaches
+`SdkValueTypes.CATALOG` on Studio's *own* classpath — Studio depends on the SDK and **must not** depend on
+this module — so a toolkit class named from there would be a `NoClassDefFoundError` the first time anyone
+generated a project. The toolkit is a plugin's dependency; the SDK is a library *and* a plugin, and only its
+plugin half may name us.
+
 ## The three rules
 
 **1. A widget takes a `ValueContext` and gets everything else from it.** Not a `CodeEditorService`, not a
@@ -36,6 +60,16 @@ that throws in its constructor leaves a row of the Parameters window with no wid
 **3. Building an editor never writes.** Not even to normalise what is already there. A project opened and
 closed must come back byte-identical, and a widget that "tidies" a value on render rewrites every bot the
 user merely looked at.
+
+**4. Nothing here may name a plugin's vocabulary.** Not in a signature, not in a name, not in a javadoc
+sentence. If a member has to say "Steam", "duration", "capture source" or "confidence", it belongs to the
+plugin that owns that word. `Fields.duration` is the worked precedent — it returns a `long` and draws no
+preview label, because spelling a total back out is the wire format owner's job, and `WireText.spellDuration`
+stayed in the SDK. `Editors.NumberRange` passes because a *bounded number* is a shape; the table saying
+`setDefaultConfidence` runs 0 to 1 does not, and stayed.
+
+This is the acceptance test for every lift out of a plugin, and it is what stops this module becoming the
+SDK's second home. A widget that is generic only because its one caller happens to be generic is not generic.
 
 ## Why there is no dependency here
 

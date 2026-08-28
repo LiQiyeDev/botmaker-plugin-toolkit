@@ -14,10 +14,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   must be allowed to version slowly, because a plugin's compiled classes cannot be rewritten; a widget kit is
   nothing but implementation and will move every time an editor does. Keeping them apart is what lets a
   plugin take a new toolkit without taking a new contract.
-- **`Editors`** — six whole editors, each built from a `ValueContext` and needing nothing else:
+- **`Slots`** — reads and writes a value that is a Java expression in a bot's source and a row of stored
+  strings in the Parameters window, so one editor serves both. Lifted out of the SDK, where it had been by
+  accident of who wrote the first editor.
+- **`CallSites`** — predicates for an editor chosen by the *call* around a value rather than by its type,
+  which is the only way to tell a Steam app id from a window title when both are `String`. Four shapes:
+  `firstArgumentOf`, `argumentOf`, `firstArgumentWhere`, `trailingArgumentOf`. Every one declines a
+  Parameters row, because a row has no call behind it.
+- **`Codecs`** — `ValueCodec`s from three lambdas, with `or` to make a partial parser total and `seeded` for
+  a type whose starting value is a choice rather than a fallback.
+- **`AbstractStudioPlugin`** — a `StudioPlugin` that builds each of its four contributions once, on first
+  use, so nothing expensive runs in the constructor `ServiceLoader` calls while a project is opening.
+- **`testing.TestContexts`** — a recording `SlotContext`/`ValueContext` for unit-testing an editor and its
+  predicate with no host, no project and no JavaFX thread.
+- **`Editors`** — eight whole editors, each built from a `ValueContext` and needing nothing else:
   `region` (drag a rectangle on screen), `numbers` (a labelled tuple), `bounded` (a slider and read-out),
-  `text`, `choice` and `gallery` (a grid of pictures). Extracted from the host's own thirteen pickers rather
-  than designed, which is why there are six: these are the shapes that recurred.
+  `text`, `choice`, `gallery` (a grid of pictures), `boundedPill` (a number with a range, edited in a dialog
+  and committed on OK) and `flag`. Extracted from the host's own thirteen pickers rather than designed, which
+  is why there are eight: these are the shapes that recurred.
 - **`Pills`** — the summary-plus-menu control nine of those thirteen are. Its menu is rebuilt on opening,
   because an editor's choices depend on state that moves.
 - **`Fields`** — a text field committing on Enter **and** on focus loss (either alone loses edits), a
