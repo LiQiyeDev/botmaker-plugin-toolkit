@@ -54,6 +54,16 @@ the lift out of the SDK, five more that are not widgets at all:
 same lift. **What did not move is the `Bound` table** naming `setDefaultConfidence` and what its range is —
 that is the SDK's knowledge about its own API, and it is the worked example of rule 4 below.
 
+**Later the same day it gained three more, and the split each time is *shape versus table*.**
+`tuplePill(ctx, TupleSpec)` is the SDK's three geometry editors written once — a pill over a few whole
+numbers, a way to take them off the screen (`Pick.REGION`/`POINT`/`MEASURE`/`NONE`, all of them host
+capabilities), a dialog to type them. The SDK keeps three `TupleSpec` constants, and what is in them is
+exactly what could not move: that a `Rect` is an origin plus a size and reads `10, 20  640×480`.
+`Slots.holdsNumbers` moved with it, because *is this value coordinates at all, or is it `target.center()`*
+is a question about source text. `program(ctx, prompt)` is browse-or-type for an executable and
+`textSlot(ctx, prompt, columns)` is `text` on the `Slots` side — the SDK's `LaunchEditors` keeps `game()`,
+its cover art, and the two prompts, which are the only sentences in it that know what a launch call is.
+
 **One thing that looks liftable and is not: the SDK's own `SdkValueTypes` still uses its private
 `codec(…)`/`seeded(…)` helpers rather than `Codecs`, and `LiteralWriter` keeps its own escaping rather than
 `Source`.** Not an oversight, and the reason **changed on 2026-08-28** without the conclusion changing. It

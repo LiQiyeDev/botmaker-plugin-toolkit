@@ -5,6 +5,30 @@ reasoning.
 
 ## Done
 
+### 2026-08-28 — the two editor shapes that were written three times
+
+Part F, phase C. Both lifts pass rule 4 the same way: what moved is the **shape**, what stayed is the
+**table**.
+
+- **`Editors.tuplePill(ctx, TupleSpec)`, with `Pick` and `Editors.tupleLabel`.** The SDK's `GeometryEditors`
+  was one editor written three times — a pill showing the numbers, a way to take them off the screen, a way
+  to type them — and it is now three `TupleSpec` constants over one implementation: 145 lines down to 72,
+  with no `Pills`, `Modals` or `Slots` call left in it. `Pick` is `REGION`, `POINT`, `MEASURE` or `NONE`;
+  every arm is a host capability (`StudioServices.capture()`), never a vocabulary, which is what let the
+  whole shape move. What the spec keeps is the part that could not: that a `Rect` is an origin plus a size
+  and reads `10, 20  640×480`.
+- **`Slots.holdsNumbers` moved with it**, because *is this value coordinates at all, or is it
+  `target.center()`* is a question about source text and this class's whole subject is source text. It is
+  the check that stops a slot holding `bounds` relabelling itself `0, 0  0×0` — claiming a value the user
+  never set.
+- **`Editors.program(ctx, prompt)` and `Editors.textSlot(ctx, prompt, columns)`.** Neither named Steam,
+  Epic or a game; `LaunchEditors.game()` does, and stays with its cover-art resolution. `textSlot` is the
+  gap `text` left: `text` writes through `ctx.set` and so cannot appear in a bot's source at all.
+- **The SDK still owns both prompts** — *"Path or command"* and *"launch option (e.g. `--fullscreen`)"* — so
+  `program()` and `option()` survive as two-line methods rather than being deleted. The example in a prompt
+  is knowledge of what a launch call is passed.
+- 39 tests (was 29), the ten new ones over the label and the check, on both the slot and the row side.
+
 ### 2026-08-28 — `Source`, and the first dependency a plugin resolves through this module
 
 Part F, phase B. A plugin emits Java whether it means to or not: a `ValueCodec`'s third function returns the

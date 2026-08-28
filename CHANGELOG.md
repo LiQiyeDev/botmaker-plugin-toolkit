@@ -42,11 +42,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   use, so nothing expensive runs in the constructor `ServiceLoader` calls while a project is opening.
 - **`testing.TestContexts`** — a recording `SlotContext`/`ValueContext` for unit-testing an editor and its
   predicate with no host, no project and no JavaFX thread.
-- **`Editors`** — eight whole editors, each built from a `ValueContext` and needing nothing else:
-  `region` (drag a rectangle on screen), `numbers` (a labelled tuple), `bounded` (a slider and read-out),
-  `text`, `choice`, `gallery` (a grid of pictures), `boundedPill` (a number with a range, edited in a dialog
-  and committed on OK) and `flag`. Extracted from the host's own thirteen pickers rather than designed, which
-  is why there are eight: these are the shapes that recurred.
+- **`Editors`** — eleven whole editors, each built from a `ValueContext` and needing nothing else:
+  `region` (drag a rectangle on screen), `numbers` (a labelled tuple), `tuplePill` (the same tuple as a
+  constructor in a bot's source, with a screen picker), `bounded` (a slider and read-out), `text`,
+  `textSlot` (the same, writing Java when the value is a slot), `program` (browse for an executable, or type
+  a command), `choice`, `gallery` (a grid of pictures), `boundedPill` (a number with a range, edited in a
+  dialog and committed on OK) and `flag`. Extracted from the host's own thirteen pickers rather than
+  designed, which is why there are eleven: these are the shapes that recurred.
+- **`Editors.tuplePill` + `TupleSpec` + `Pick`** — one editor where the SDK had three. A `TupleSpec` says
+  which class the slot constructs, what its numbers are called, how a person reads them back, and whether
+  they can come off the screen (`REGION` drags, `POINT` clicks under a magnifier, `MEASURE` drags and throws
+  the origin away). The formatter stays with whoever owns the type: *a small tuple of pixels* is a shape,
+  *a `Rect` is an origin plus a size* is not. `Editors.tupleLabel` is public alongside it because the label
+  is the one half assertable with no JavaFX toolkit, and the half worth asserting — it is read back out of
+  what the last pick wrote.
+- **`Slots.holdsNumbers`** — whether a value is coordinates at all, rather than a variable or a call that
+  happens to read as zeroes. Without it a slot holding `bounds` labels itself `0, 0  0×0`, which claims a
+  value the user never set.
 - **`Pills`** — the summary-plus-menu control nine of those thirteen are. Its menu is rebuilt on opening,
   because an editor's choices depend on state that moves.
 - **`Fields`** — a text field committing on Enter **and** on focus loss (either alone loses edits), a

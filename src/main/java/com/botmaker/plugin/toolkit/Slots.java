@@ -118,6 +118,54 @@ public final class Slots {
         return out;
     }
 
+    /**
+     * Whether the value is a row of whole numbers at all, rather than something else that happens to read as
+     * zeroes — a variable, a call, a computed expression.
+     *
+     * <p>The check every tuple editor needs before it labels itself. Without it a slot holding {@code bounds}
+     * would show {@code 0, 0  0×0}, which claims a value the user never set; showing the raw text instead is
+     * honest, and rewriting somebody's {@code target.center()} into "0, 0" is a lie about what the bot does.
+     *
+     * <p>Two things it deliberately does <em>not</em> check. A <b>missing</b> argument is fine and reads as
+     * zero — {@code new Point(10)} is what a freshly inserted block looks like before the user picks, and
+     * labelling it {@code 10, 0} is the right answer. And the <b>type being constructed</b> is nobody's
+     * business: which editor a slot gets was decided by its declared type one layer up, so this reads
+     * positionally and a second type check would be dead code.
+     *
+     * <p>Here rather than in {@link Editors} because it is source-text inspection, which is this class's
+     * whole subject: it moved out of the SDK with {@code tuplePill} on 2026-08-28 and names no SDK type.
+     */
+    public static boolean holdsNumbers(ValueContext ctx, int n) {
+        if (ctx.asSlot() == null) {
+            List<String> parts = ctx.value();
+            if (parts.size() < n) return false;
+            for (int i = 0; i < n; i++) {
+                if (!isNumber(parts.get(i))) return false;
+            }
+            return true;
+        }
+        String raw = raw(ctx);
+        if (!raw.startsWith("new ")) return false;
+        List<String> args = arguments(raw);
+        for (int i = 0; i < Math.min(n, args.size()); i++) {
+            String arg = args.get(i).trim();
+            if (!arg.isEmpty() && !isNumber(arg)) return false;
+        }
+        return true;
+    }
+
+    /** A whole number as a person writes one, with a Java {@code long} suffix or digit separators allowed. */
+    private static boolean isNumber(String text) {
+        String s = text == null ? "" : text.trim().replace("_", "");
+        if (s.endsWith("L") || s.endsWith("l")) s = s.substring(0, s.length() - 1);
+        if (s.isEmpty()) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!Character.isDigit(c) && !(i == 0 && (c == '-' || c == '+'))) return false;
+        }
+        return !(s.length() == 1 && (s.charAt(0) == '-' || s.charAt(0) == '+'));
+    }
+
     /** The one string literal in {@code source}, unescaped, or {@code null} when there is none. */
     public static String stringLiteral(String source) {
         String s = source == null ? "" : source;

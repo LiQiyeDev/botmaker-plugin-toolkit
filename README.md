@@ -41,7 +41,7 @@ as a `ValueContext`.
 
 | | |
 |---|---|
-| `Editors` | whole editors — `region`, `numbers`, `bounded`, `text`, `choice`, `gallery`. Take a `ValueContext`, need nothing else. |
+| `Editors` | whole editors — `region`, `numbers`, `tuplePill`, `bounded`, `boundedPill`, `flag`, `text`, `textSlot`, `program`, `choice`, `gallery`. Take a `ValueContext`, need nothing else. |
 | `Pills` | the summary-plus-menu control nine of the host's own thirteen pickers are. |
 | `Fields` | a text field that commits on Enter *and* on blur; a clamped spinner; a slider with a read-out. |
 | `Modals` | a themed, correctly-owned numbers dialog and thumbnail chooser. |

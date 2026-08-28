@@ -8,13 +8,16 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -30,14 +33,16 @@ import java.util.function.Supplier;
  * }</pre>
  *
  * <p>They were extracted from the host's own thirteen pickers rather than designed, which is why there are
- * eight and not sixteen: these are the shapes that recurred. An editor that needs something else builds it
+ * eleven and not sixteen: these are the shapes that recurred. An editor that needs something else builds it
  * from the layer below, and the day a second one wants the same thing it is worth adding here — which is how
- * {@link #boundedPill} and {@link #flag} arrived, out of the SDK, on 2026-08-28.
+ * {@link #boundedPill} and {@link #flag}, and then {@link #tuplePill}, {@link #program} and
+ * {@link #textSlot}, arrived out of the SDK on 2026-08-28.
  *
- * <p><b>Two of them read through {@link Slots} and the other six through {@link ValueContext} directly</b>,
- * and the difference is which places the editor can serve. {@code Slots} spells a value as Java when the
- * context is a slot in a bot's source and as stored text when it is a Parameters row; the plain ones write
- * stored text either way. Reach for {@code Slots} whenever the editor might sit in source.
+ * <p><b>Some read through {@link Slots} and the rest through {@link ValueContext} directly</b>, and the
+ * difference is which places the editor can serve. {@code Slots} spells a value as Java when the context is
+ * a slot in a bot's source and as stored text when it is a Parameters row; the plain ones write stored text
+ * either way. Reach for {@code Slots} whenever the editor might sit in source — which is why {@link #text}
+ * and {@link #textSlot}, and {@link #numbers} and {@link #tuplePill}, are pairs rather than one method each.
  *
  * <p><b>Every one of them writes only when the user acts.</b> Building an editor never sets a value — not
  * even to normalise what is already there — because a project that is merely opened and closed must come
@@ -217,6 +222,184 @@ public final class Editors {
         box.setOnAction(e -> Slots.write(ctx, Boolean.toString(box.isSelected()),
                 Boolean.toString(box.isSelected())));
         return box;
+    }
+
+    /**
+     * How the numbers of a {@link TupleSpec} are taken off the screen.
+     *
+     * <p>Every arm is a host capability — {@link com.botmaker.plugin.api.StudioServices#capture()} — and not
+     * a plugin's vocabulary, which is why the whole shape could move here. What differs between them is only
+     * which of the four numbers a drag or a click yields, and the word for the action: you <i>select</i> a
+     * region, <i>pick</i> a pixel and <i>measure</i> a thing whose position does not matter.
+     */
+    public enum Pick {
+
+        /** Drag a rectangle; writes {@code x, y, width, height}. */
+        REGION("Select on screen…"),
+
+        /** Click one pixel under a magnifier; writes {@code x, y}. */
+        POINT("Pick on screen…"),
+
+        /** Drag a rectangle and throw the origin away; writes {@code width, height}. */
+        MEASURE("Measure on screen…"),
+
+        /** No on-screen arm at all — the numbers are only ever typed. */
+        NONE(null);
+
+        private final String item;
+
+        Pick(String item) {
+            this.item = item;
+        }
+
+        /** The menu entry's wording, or {@code null} for {@link #NONE}. */
+        public String item() {
+            return item;
+        }
+    }
+
+    /**
+     * A small tuple of whole numbers that is also a thing on the screen.
+     *
+     * <p>The shape behind every coordinate editor: a pill showing the numbers, a way to take them off the
+     * screen, and a way to type them. Taking them off the screen is what it exists for — nobody knows that a
+     * health bar is 240 pixels wide, they know where its ends are.
+     *
+     * @param type        the class the slot's expression constructs; the same class is passed as the import
+     * @param title       the value's name, used as the dialog's title and in the empty pill's placeholder
+     * @param labels      one per number, in constructor order — this is also how many numbers there are
+     * @param placeholder what the pill says with nothing chosen yet
+     * @param pick        how the numbers come off the screen, if they can
+     * @param label       the numbers as the pill spells them, which is the part every tuple words differently
+     */
+    public record TupleSpec(Class<?> type, String title, String[] labels, String placeholder, Pick pick,
+                            Function<int[], String> label) {}
+
+    /**
+     * A pill over a {@link TupleSpec}: the numbers, a screen picker and a typed dialog.
+     *
+     * <p>Reads and writes through {@link Slots}, so one editor serves a slot in a bot's source and a row of
+     * the Parameters window; the slot gets {@code new Rect(12, 40, 300, 80)} and the row gets four strings.
+     *
+     * <p>Distinct from {@link #numbers}, which is the same idea without a screen and without a constructor:
+     * that one writes stored values through {@code ctx.set} and cannot appear in source.
+     */
+    public static Node tuplePill(ValueContext ctx, TupleSpec spec) {
+        MenuButton pill = Pills.bare(tupleLabel(ctx, spec));
+        Pills.onOpen(pill, () -> {
+            List<javafx.scene.control.MenuItem> items = new ArrayList<>();
+            if (spec.pick() != Pick.NONE) {
+                items.add(Pills.item(spec.pick().item(), () -> pickTuple(ctx, spec, pill)));
+                items.add(Pills.separator());
+            }
+            items.add(Pills.item("Edit values…", () -> Modals.numbers(ctx, spec.title(), spec.labels(),
+                    Slots.ints(ctx, spec.labels().length), picked -> {
+                        Slots.writeConstructor(ctx, spec.type(), picked);
+                        pill.setText(tupleLabel(ctx, spec));
+                    })));
+            return items;
+        });
+        return pill;
+    }
+
+    /**
+     * What the collapsed pill says — the placeholder, the formatted numbers, or the source text verbatim.
+     *
+     * <p>Public because it is the one piece of a tuple editor that can be asserted with no JavaFX toolkit,
+     * and it is the piece worth asserting: the number a user reads off the pill is read back out of what the
+     * last pick wrote, and getting it wrong shows one coordinate while the bot runs another.
+     */
+    public static String tupleLabel(ValueContext ctx, TupleSpec spec) {
+        if (Slots.isEmpty(ctx)) return spec.placeholder();
+        int count = spec.labels().length;
+        return Slots.holdsNumbers(ctx, count)
+                ? spec.label().apply(Slots.ints(ctx, count))
+                : Slots.raw(ctx);
+    }
+
+    private static void pickTuple(ValueContext ctx, TupleSpec spec, MenuButton pill) {
+        switch (spec.pick()) {
+            case REGION -> ctx.services().capture().selectRegion(r -> {
+                Slots.writeConstructor(ctx, spec.type(), r.x(), r.y(), r.width(), r.height());
+                pill.setText(tupleLabel(ctx, spec));
+            });
+            case MEASURE -> ctx.services().capture().selectRegion(r -> {
+                Slots.writeConstructor(ctx, spec.type(), r.width(), r.height());
+                pill.setText(tupleLabel(ctx, spec));
+            });
+            case POINT -> ctx.services().capture().pickPoint(p -> {
+                Slots.writeConstructor(ctx, spec.type(), p.x(), p.y());
+                pill.setText(tupleLabel(ctx, spec));
+            });
+            case NONE -> { }
+        }
+    }
+
+    /**
+     * A pill over a path to a program: the OS file chooser, or a typed path.
+     *
+     * <p>Typed matters as much as browsed: what a call launches is frequently a command that is not a file on
+     * this machine at all, and a chooser alone would make those unsayable. Browsing goes through
+     * {@link Modals#program}, which is where the "a native dialog blocks its thread" trap is answered once
+     * for every plugin rather than once per editor.
+     *
+     * <p>The label is the file's own name and not the whole path: a slot on a block is a few centimetres
+     * wide, and {@code C:\Program Files (x86)\…\game.exe} elided in the middle says less than
+     * {@code game.exe}.
+     *
+     * @param prompt the typed field's prompt — the place to say what a command is allowed to look like
+     */
+    public static Node program(ValueContext ctx, String prompt) {
+        MenuButton pill = Pills.bare(fileLabel(Slots.stringLiteral(Slots.raw(ctx))));
+        Pills.onOpen(pill, () -> List.of(
+                Pills.item("Browse for program…", () -> Modals.program(ctx,
+                        parentOf(Slots.stringLiteral(Slots.raw(ctx))), path -> {
+                            Slots.writeText(ctx, path.toString());
+                            pill.setText(fileLabel(path.toString()));
+                        })),
+                Pills.separator(),
+                Pills.item("Enter path…", () -> {
+                    String now = Slots.stringLiteral(Slots.raw(ctx));
+                    TextField field = Fields.committing(now == null ? "" : now, prompt, null);
+                    field.setPrefColumnCount(40);
+                    Modals.form(ctx, "Program path", field, () -> {
+                        String typed = field.getText() == null ? "" : field.getText().trim();
+                        if (typed.isEmpty()) return;
+                        Slots.writeText(ctx, typed);
+                        pill.setText(fileLabel(typed));
+                    });
+                })));
+        return pill;
+    }
+
+    /**
+     * A text field over a value that may be a slot — {@link #text}'s counterpart on the {@link Slots} side.
+     *
+     * <p>{@code text} writes through {@code ctx.set}, which stores the characters themselves; this writes a
+     * Java string literal when the value is a slot in a bot's source, and the same characters when it is a
+     * Parameters row. An editor that might sit in source wants this one.
+     */
+    public static Node textSlot(ValueContext ctx, String prompt, int columns) {
+        String current = Slots.stringLiteral(Slots.raw(ctx));
+        TextField field = Fields.committing(current == null ? "" : current, prompt,
+                typed -> Slots.writeText(ctx, typed));
+        if (columns > 0) field.setPrefColumnCount(columns);
+        return field;
+    }
+
+    /** The folder a path sits in, for the chooser to open on; null when there is no usable path yet. */
+    private static Path parentOf(String path) {
+        try {
+            return path == null || path.isBlank() ? null : Path.of(path).getParent();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static String fileLabel(String path) {
+        if (path == null || path.isBlank()) return "Choose program…";
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return slash >= 0 && slash < path.length() - 1 ? path.substring(slash + 1) : path;
     }
 
     private static VBox rangeBody(NumberRange range, Node control) {
