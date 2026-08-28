@@ -5,6 +5,25 @@ reasoning.
 
 ## Done
 
+### 2026-08-28 — a CI workflow, and a GitHub Release published by JReleaser
+
+- **`.github/workflows/ci.yml` — this repository's first workflow of any kind.** Three jobs: `build` on
+  every push and PR (checking out `botmaker-studio-api` from source, since the pom pins it at
+  `0.0.0-SNAPSHOT` and no such artifact is published), `release` and `jitpack` on a `v*` tag. Tests run
+  here rather than being skipped: `ValuesTest` is a fraction of a second and holds the rule a plugin author
+  depends on most — every reader of a value degrades and never throws.
+- **`jreleaser.yml` + `tools/changelog-section.sh`.** The tag publishes the GitHub Release with the
+  `## [x.y.z]` section of `CHANGELOG.md` as its body. The extractor is a script in this repository, not in
+  the umbrella, because two readers must not be able to disagree about it: the umbrella's `check_changelog`
+  gate calls it before anything is tagged, and the workflow calls it for the notes.
+- **Why CI and not the umbrella's `release.sh`:** JReleaser cannot open a submodule — `.git` is a `gitdir:`
+  FILE there and its JGit reports *repository not found*, while `--git-root-search` resolves the
+  **umbrella** repo instead. `jreleaser-maven-plugin` is not a way round it either: it ignores
+  `jreleaser.yml` and reads the cosmetic `0.0.0-SNAPSHOT` from the pom. The version comes from the tag as
+  `JRELEASER_PROJECT_VERSION`. The build itself is untouched.
+- Also found, and now refused in `release.sh`'s decide pass: **this repository has no `origin` remote.**
+  Create `LiQiyeDev/botmaker-plugin-toolkit` before any `--plugin-toolkit` release.
+
 ### 2026-08-27 — the module exists (plugin platform, phase 12a)
 
 Created as the eighth BotMaker repository, third in the umbrella reactor — after `botmaker-studio-api`,
