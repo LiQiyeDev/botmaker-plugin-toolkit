@@ -9,6 +9,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **`Editors.choiceSlot(ctx, options, prompt)`** — a dropdown over a set that moves, over a value that may be
+  a slot. It is `choice` written through `Slots`, so the value is a Java string literal in a bot's source and
+  the characters themselves in a Parameters row; the options are a `Supplier` read when the list opens, so a
+  name added elsewhere a moment ago is offered without redrawing the block; and the box is editable, because
+  a value naming something that does not exist yet is a real state and an editor that could not say it would
+  make writing the code before the thing it names impossible.
 - **The module** — the eighth BotMaker repository, and the second one a plugin compiles against. It holds
   what `botmaker-studio-api` deliberately cannot: implementation. The contract is interfaces and records and
   must be allowed to version slowly, because a plugin's compiled classes cannot be rewritten; a widget kit is

@@ -130,6 +130,60 @@ public final class Editors {
     }
 
     /**
+     * A dropdown over a set that moves, over a value that may be a slot — {@link #choice}'s counterpart on
+     * the {@link Slots} side, and {@link #textSlot}'s with a list of suggestions attached.
+     *
+     * <p>Three differences from {@link #choice}, each of them the reason this exists:
+     *
+     * <ul>
+     *   <li><b>It writes through {@link Slots}</b>, so the value is a Java string literal in a bot's source
+     *       and the characters themselves in a Parameters row.</li>
+     *   <li><b>{@code options} is a {@link Supplier} read when the list is opened</b>, never when the node is
+     *       built. What there is to choose from changes while a block is on screen — a name added in another
+     *       window a moment ago — and a list read at render time is the list as it was when the block first
+     *       appeared. Same rule as {@link #gallery}.</li>
+     *   <li><b>The box is editable</b>, so a name that is not on the list yet can still be typed. A value
+     *       naming something that does not exist is a real state and frequently a deliberate one — the code
+     *       written before the thing it names — so the editor must be able to say it. Typing commits on Enter
+     *       and on losing focus, for the reason {@link Fields#committing} exists.</li>
+     * </ul>
+     *
+     * <p>Whatever is already in the value is kept and shown even when the supplier does not offer it, which
+     * is {@link #choice}'s rule and matters more here: the list is the project's current state and the value
+     * is what somebody wrote, and correcting the second to match the first would silently edit a bot.
+     *
+     * @param prompt what the empty box says — the place to name what the list holds
+     */
+    public static Node choiceSlot(ValueContext ctx, Supplier<List<String>> options, String prompt) {
+        ComboBox<String> box = Styles.on(new ComboBox<>(), Styles.INSET_FIELD_FLAT);
+        box.setEditable(true);
+        box.setPromptText(prompt);
+
+        String literal = Slots.stringLiteral(Slots.raw(ctx));
+        String current = literal != null ? literal : ctx.single();
+        if (current != null && !current.isBlank()) box.setValue(current);
+
+        box.setOnShowing(event -> {
+            List<String> items = new ArrayList<>(options == null ? List.of() : options.get());
+            String now = box.getValue();
+            if (now != null && !now.isBlank() && !items.contains(now)) items.add(now);
+            box.getItems().setAll(items);
+        });
+        box.valueProperty().addListener((obs, was, now) -> {
+            if (now != null && !now.isBlank() && !now.equals(was)) Slots.writeText(ctx, now);
+        });
+        // An editable ComboBox commits its editor to valueProperty on Enter and on nothing else, so clicking
+        // away from a typed name would lose it — the same edit a bare TextField loses, and the reason
+        // Fields.committing exists.
+        box.focusedProperty().addListener((obs, was, focused) -> {
+            if (focused) return;
+            String typed = box.getEditor() == null ? null : box.getEditor().getText();
+            if (typed != null && !typed.isBlank()) box.setValue(typed.trim());
+        });
+        return box;
+    }
+
+    /**
      * A pill opening a grid of pictures.
      *
      * <p>{@code items} is a {@link Supplier} and is called when the pill is opened, never when it is built:

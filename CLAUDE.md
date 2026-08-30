@@ -60,7 +60,15 @@ numbers, a way to take them off the screen (`Pick.REGION`/`POINT`/`MEASURE`/`NON
 capabilities), a dialog to type them. The SDK keeps three `TupleSpec` constants, and what is in them is
 exactly what could not move: that a `Rect` is an origin plus a size and reads `10, 20  640×480`.
 `Slots.holdsNumbers` moved with it, because *is this value coordinates at all, or is it `target.center()`*
-is a question about source text. `program(ctx, prompt)` is browse-or-type for an executable and
+is a question about source text. **`choiceSlot(ctx, options, prompt)` arrived on 2026-08-30 and is the pair to `choice` that `textSlot` is to
+`text`** — it writes through `Slots`, so the value is a Java string literal in a bot's source and the
+characters themselves in a Parameters row. Two things in it are the shape rather than a preference: the
+options are a `Supplier` read when the list opens (a set that moves — `gallery`'s rule), and the box is
+**editable**, because a value naming something that does not exist yet is a real and frequently deliberate
+state, and an editor that could only pick from what exists would make it unsayable. Its one caller today is
+the SDK's activity/outcome pair, and the vocabulary — *which* names, and the prompts — stayed there.
+
+`program(ctx, prompt)` is browse-or-type for an executable and
 `textSlot(ctx, prompt, columns)` is `text` on the `Slots` side — the SDK's `LaunchEditors` keeps `game()`,
 its cover art, and the two prompts, which are the only sentences in it that know what a launch call is.
 
