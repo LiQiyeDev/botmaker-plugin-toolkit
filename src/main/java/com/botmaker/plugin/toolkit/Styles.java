@@ -73,6 +73,16 @@ public final class Styles {
     /** The caption under a {@link #TILE}. */
     public static final String TILE_NAME = "template-tile-name";
 
+    /**
+     * On the root of a window that must <em>not</em> acquire the host's chrome — a translucent surface drawn
+     * over a live game, where the shell's background, border and radius are the one thing that would ruin it.
+     *
+     * <p>An opt-out rather than an omission: the host themes a plugin's windows for it, so a surface that
+     * wants no theme has to say so. It is a marker class, so it carries no properties of its own and a host
+     * that does not recognise it simply themes the window as usual.
+     */
+    public static final String UNTHEMED = "unthemed-window";
+
     /** Adds {@code classes} to {@code node} and hands it back, so a builder reads as one expression. */
     public static <T extends Node> T on(T node, String... classes) {
         if (node != null && classes != null) node.getStyleClass().addAll(classes);
