@@ -48,6 +48,12 @@ the lift out of the SDK, five more that are not widgets at all:
 | `Codecs` | `ValueCodec`s from lambdas, plus `or` (total) and `seeded` | three one-line answers should not cost eleven lines of anonymous class per type |
 | `AbstractStudioPlugin` | the four contributions, each built once on first use | the build hooks **cannot be fields**: `ServiceLoader` constructs a plugin while a project is opening |
 | `testing.TestContexts` | a recording `SlotContext`/`ValueContext` | a plugin author could not unit-test an editor without writing this first, so the predicate half went untested |
+
+**`TestContexts` gained `withRun` on 2026-08-31**, for the contract's new `SlotRun`. It records what an
+editor writes to a run *and enforces `minimum()` exactly as the host does* — a `replace` with too few
+elements leaves the elements alone and counts no write — so a test can assert that an editor honours the
+floor rather than trusting it. `run()` answers `null` without it, which is what nearly every real slot
+answers and therefore the case an editor must handle first. `SlotRunTest` holds those cases.
 | `Source` (2026-08-28) | Java source: a string literal, a char, a number, a constructor, a static call | a plugin emits Java whether it means to or not — `ValueCodec.literal` and every slot write — and this project already had three hand-rolled escapers, each of which stopped at the backslash and the quote |
 | `ZoomPan` (2026-08-30) | Ctrl+scroll zoom about the cursor and middle-drag pan, as event **filters** over a `Pane` and a content `Group` | it names no capture target, no colour and nothing of any plugin's API — it is a gesture, which is the definition of a shape. Written in Studio, held in the SDK for two slices because Studio source may not name a toolkit type, and moved the moment both its callers were the SDK's |
 

@@ -1,6 +1,7 @@
 package com.botmaker.plugin.toolkit.testing;
 
 import com.botmaker.plugin.api.SlotContext;
+import com.botmaker.plugin.api.SlotRun;
 import com.botmaker.plugin.api.StudioServices;
 import com.botmaker.plugin.api.TypeRef;
 import com.botmaker.plugin.api.ValueContext;
@@ -94,6 +95,11 @@ public final class TestContexts {
         private String enclosingSource;
         private int writes;
 
+        private List<String> runElements;
+        private int runMinimum;
+        private List<String> runAllowed;
+        private List<String> runReplacement;
+
         private Recording(String typeName, List<String> value, String currentSource,
                           String enclosingClass, String enclosingMethod, int argIndex) {
             this.typeName = typeName == null ? "" : typeName;
@@ -119,6 +125,31 @@ public final class TestContexts {
         public Recording withEnclosingSource(String source) {
             this.enclosingSource = source;
             return this;
+        }
+
+        /**
+         * Makes this slot part of a {@link SlotRun} of {@code elements}, as a varargs argument is.
+         *
+         * <p>Without it {@link #run()} answers {@code null}, which is what nearly every real slot answers and
+         * so the case an editor must handle first. {@code minimum} and {@code allowed} are the host's two
+         * narrowings — how few elements the surrounding code still compiles with, and the only element
+         * sources it will accept ({@code null} for no limit).
+         */
+        public Recording withRun(List<String> elements, int minimum, List<String> allowed) {
+            this.runElements = elements == null ? List.of() : List.copyOf(elements);
+            this.runMinimum = Math.max(0, minimum);
+            this.runAllowed = allowed == null ? null : List.copyOf(allowed);
+            return this;
+        }
+
+        /** As {@link #withRun(List, int, List)}, with no minimum and no narrowing. */
+        public Recording withRun(String... elements) {
+            return withRun(List.of(elements), 0, null);
+        }
+
+        /** What {@link SlotRun#replace} was last given, or {@code null} if the editor never rewrote the run. */
+        public List<String> runReplacement() {
+            return runReplacement;
         }
 
         /** What {@link #set} was last given — the stored form, for a row. */
@@ -223,6 +254,45 @@ public final class TestContexts {
             this.imports.clear();
             if (importsNeeded != null) this.imports.addAll(List.of(importsNeeded));
             writes++;
+        }
+
+        /**
+         * The run set up by {@link #withRun}, or {@code null}.
+         *
+         * <p>{@link SlotRun#replace} records rather than writes, and it enforces {@link SlotRun#minimum()}
+         * exactly as the host does — a shorter list leaves the elements alone and counts no write, so a test
+         * can assert that an editor's floor is honoured rather than trusting it.
+         */
+        @Override
+        public SlotRun run() {
+            if (runElements == null) return null;
+            return new SlotRun() {
+                @Override
+                public List<String> elements() {
+                    return runElements;
+                }
+
+                @Override
+                public int minimum() {
+                    return runMinimum;
+                }
+
+                @Override
+                public List<String> allowed() {
+                    return runAllowed;
+                }
+
+                @Override
+                public void replace(List<String> javaExpressions, String... importsNeeded) {
+                    List<String> next = javaExpressions == null ? List.of() : List.copyOf(javaExpressions);
+                    if (next.size() < runMinimum) return;
+                    runReplacement = next;
+                    runElements = next;
+                    imports.clear();
+                    if (importsNeeded != null) imports.addAll(List.of(importsNeeded));
+                    writes++;
+                }
+            };
         }
 
         @Override
