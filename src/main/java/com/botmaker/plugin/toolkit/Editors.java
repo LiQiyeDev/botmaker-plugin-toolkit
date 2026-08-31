@@ -53,6 +53,22 @@ public final class Editors {
     private Editors() {}
 
     /**
+     * Where the widgets in this class go to ask the user to point at something. See {@link ScreenPicks} for
+     * why it is supplied by the plugin rather than by the host, and why a static field is the right shape.
+     */
+    private static ScreenPicks picks = ScreenPicks.NONE;
+
+    /**
+     * Registers the screen picker every editor here uses. Call it once, from the plugin's constructor.
+     *
+     * <p>Passing {@code null} restores {@link ScreenPicks#NONE} rather than throwing, so a plugin that
+     * conditionally has no capture path can say so in one line.
+     */
+    public static void pickWith(ScreenPicks screenPicks) {
+        picks = screenPicks == null ? ScreenPicks.NONE : screenPicks;
+    }
+
+    /**
      * A pill over {@code labels.length} whole numbers, edited in a dialog.
      *
      * <p>The shape of {@code Point}, {@code Size} and any other small tuple. The pill shows the numbers
@@ -73,13 +89,14 @@ public final class Editors {
     /**
      * A pill over a screen rectangle: <i>Select on screen…</i>, or the four numbers by hand.
      *
-     * <p>The one editor that is worth having even if a plugin ships nothing else, because dragging out a
-     * region is a thing a plugin genuinely cannot do for itself — the host owns the overlay.
+     * <p>The one editor that is worth having even if a plugin ships nothing else: dragging out a region is
+     * the pick every other one is a variation of. The overlay behind it is the plugin's own — see
+     * {@link ScreenPicks}.
      */
     public static Node region(ValueContext ctx) {
         MenuButton pill = Pills.bare(regionLabel(ctx));
         Pills.onOpen(pill, () -> List.of(
-                Pills.item("Select on screen…", () -> ctx.services().capture().selectRegion(r -> {
+                Pills.item("Select on screen…", () -> picks.region(r -> {
                     ctx.set(Values.of(r.x(), r.y(), r.width(), r.height()));
                     pill.setText(regionLabel(ctx));
                 })),
@@ -281,8 +298,9 @@ public final class Editors {
     /**
      * How the numbers of a {@link TupleSpec} are taken off the screen.
      *
-     * <p>Every arm is a host capability — {@link com.botmaker.plugin.api.StudioServices#capture()} — and not
-     * a plugin's vocabulary, which is why the whole shape could move here. What differs between them is only
+     * <p>Every arm is a {@link ScreenPicks} call and not a plugin's vocabulary, which is why the whole shape
+     * could move here. (It was a host capability until 2026-08-31, when the overlay went to the plugins; the
+     * arms did not change, only who draws them.) What differs between them is only
      * which of the four numbers a drag or a click yields, and the word for the action: you <i>select</i> a
      * region, <i>pick</i> a pixel and <i>measure</i> a thing whose position does not matter.
      */
@@ -373,15 +391,15 @@ public final class Editors {
 
     private static void pickTuple(ValueContext ctx, TupleSpec spec, MenuButton pill) {
         switch (spec.pick()) {
-            case REGION -> ctx.services().capture().selectRegion(r -> {
+            case REGION -> picks.region(r -> {
                 Slots.writeConstructor(ctx, spec.type(), r.x(), r.y(), r.width(), r.height());
                 pill.setText(tupleLabel(ctx, spec));
             });
-            case MEASURE -> ctx.services().capture().selectRegion(r -> {
+            case MEASURE -> picks.region(r -> {
                 Slots.writeConstructor(ctx, spec.type(), r.width(), r.height());
                 pill.setText(tupleLabel(ctx, spec));
             });
-            case POINT -> ctx.services().capture().pickPoint(p -> {
+            case POINT -> picks.point(p -> {
                 Slots.writeConstructor(ctx, spec.type(), p.x(), p.y());
                 pill.setText(tupleLabel(ctx, spec));
             });
