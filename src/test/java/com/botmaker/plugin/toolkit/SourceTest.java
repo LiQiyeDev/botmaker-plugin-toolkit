@@ -4,8 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link Source}, whose output is compiled by somebody else's build.
@@ -14,6 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * out of a text area, a Windows path full of backslashes — and in each one a wrong answer is a compile
  * error in a <em>bot</em>, reported against a line its author did not write. That is why this is worth
  * asserting where "the builder returned non-null" is not.
+ *
+ * <p>Since 2026-09-01 two of those wrong answers are refused by javac instead: an argument is a
+ * {@link Source.Expr} rather than an {@code Object}, and a method name is resolved against the class it is
+ * called on. The cases for both are at the bottom.
  */
 class SourceTest {
 
@@ -27,7 +34,7 @@ class SourceTest {
                 "tab\there", "\"tab\\there\"",
                 "cr\rhere", "\"cr\\rhere\"",
                 "", "\"\"");
-        expected.forEach((text, literal) -> assertEquals(literal, Source.string(text)));
+        expected.forEach((text, literal) -> assertEquals(literal, Source.string(text).source()));
     }
 
     /**
@@ -39,7 +46,7 @@ class SourceTest {
      */
     @Test
     void a_multi_line_string_stays_one_expression() {
-        String literal = Source.string("first\nsecond\nthird");
+        String literal = Source.string("first\nsecond\nthird").source();
         assertEquals("\"first\\nsecond\\nthird\"", literal);
         assertFalse(literal.contains("\n"), "a slot expression may not span source lines");
         assertFalse(literal.contains("+"), "a slot expression is not a concatenation");
@@ -47,43 +54,36 @@ class SourceTest {
 
     @Test
     void a_control_character_becomes_a_unicode_escape() {
-        assertEquals("\"bell\\u0007\"", Source.string("bell\u0007"));
+        assertEquals("\"bell\\u0007\"", Source.string("bell\u0007").source());
     }
 
     @Test
     void a_null_string_is_the_empty_literal_rather_than_null() {
-        assertEquals("\"\"", Source.string(null));
+        assertEquals("\"\"", Source.string(null).source());
     }
 
     @Test
     void a_char_literal_escapes_its_own_quote_and_not_the_other_one() {
-        assertEquals("'a'", Source.character('a'));
-        assertEquals("'\\''", Source.character('\''));
-        assertEquals("'\"'", Source.character('"'));
-        assertEquals("'\\n'", Source.character('\n'));
-        assertEquals("'\\\\'", Source.character('\\'));
+        assertEquals("'a'", Source.character('a').source());
+        assertEquals("'\\''", Source.character('\'').source());
+        assertEquals("'\"'", Source.character('"').source());
+        assertEquals("'\\n'", Source.character('\n').source());
+        assertEquals("'\\\\'", Source.character('\\').source());
     }
 
     @Test
     void a_whole_number_reads_as_a_count_and_a_fraction_as_a_decimal() {
-        assertEquals("3", Source.number(3.0));
-        assertEquals("0.75", Source.number(0.75));
-        assertEquals("-2", Source.number(-2.0));
-        assertEquals("500", Source.number(500L));
+        assertEquals("3", Source.number(3.0).source());
+        assertEquals("0.75", Source.number(0.75).source());
+        assertEquals("-2", Source.number(-2.0).source());
+        assertEquals("500", Source.number(500L).source());
     }
 
     @Test
     void a_constructor_names_its_type_in_full_and_keeps_argument_order() {
-        assertEquals("new java.awt.Point(12, 34)", Source.newInstance(java.awt.Point.class, 12, 34));
+        assertEquals("new java.awt.Point(12, 34)",
+                Source.newInstance(java.awt.Point.class, Source.number(12), Source.number(34)));
         assertEquals("new java.lang.String()", Source.newInstance(String.class));
-    }
-
-    @Test
-    void an_argument_is_source_so_text_has_to_be_quoted_by_the_caller() {
-        assertEquals("java.lang.String.valueOf(\"ding\")",
-                Source.call(String.class, "valueOf", Source.string("ding")));
-        // The other reading, spelled out: an unwrapped argument is an expression, which is a variable here.
-        assertEquals("java.lang.String.valueOf(name)", Source.call(String.class, "valueOf", "name"));
     }
 
     @Test
@@ -93,12 +93,84 @@ class SourceTest {
 
     @Test
     void an_enum_constant_is_qualified_by_its_own_declaring_type() {
-        assertEquals("java.time.DayOfWeek.MONDAY", Source.enumConstant(java.time.DayOfWeek.MONDAY));
-        assertEquals("null", Source.enumConstant(null));
+        assertEquals("java.time.DayOfWeek.MONDAY", Source.enumConstant(java.time.DayOfWeek.MONDAY).source());
+        assertEquals("null", Source.enumConstant(null).source());
     }
 
     @Test
     void slots_quote_is_the_same_answer_because_it_is_the_same_code() {
-        assertEquals(Source.string("a\tb"), Slots.quote("a\tb"));
+        assertEquals(Source.string("a\tb").source(), Slots.quote("a\tb"));
+    }
+
+    // ---- an argument is source, and the type now says so -----------------------------------------------
+
+    /**
+     * The distinction {@link Source.Expr} exists for, in the two spellings that used to be one type.
+     *
+     * <p>{@code call(String.class, "valueOf", "name")} no longer compiles — that is the whole point, and
+     * the reason there is no test asserting what it used to emit. Text is {@link Source#string}; an
+     * expression the caller vouches for is {@link Source#code}.
+     */
+    @Test
+    void text_and_an_expression_are_different_types_rather_than_different_readings() {
+        assertEquals("java.lang.String.valueOf(\"ding\")",
+                Source.call(String.class, "valueOf", Source.string("ding")));
+        assertEquals("java.lang.String.valueOf(name)",
+                Source.call(String.class, "valueOf", Source.code("name")));
+    }
+
+    /** An {@code Expr} prints and concatenates as the source it holds, so it drops into a message unchanged. */
+    @Test
+    void an_expr_reads_as_its_own_source() {
+        assertEquals("\"ding\"", Source.string("ding").toString());
+        assertEquals("was \"ding\"", "was " + Source.string("ding"));
+    }
+
+    /** Blank and null are the same accident, and both are the literal {@code null} rather than empty source. */
+    @Test
+    void an_empty_expression_is_the_null_literal_and_not_a_hole() {
+        assertEquals("null", Source.code(null).source());
+        assertEquals("null", Source.code("   ").source());
+    }
+
+    // ---- a method name is checked against its class ----------------------------------------------------
+
+    @Test
+    void a_method_the_class_does_not_declare_is_refused_at_the_call() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> Source.call(String.class, "valueOff", Source.code("x")));
+        assertTrue(e.getMessage().contains("valueOff"), e.getMessage());
+        assertTrue(e.getMessage().contains("valueOf"), "the near miss is worth naming: " + e.getMessage());
+    }
+
+    /**
+     * Declared, not inherited — the rule {@code PaletteCatalog} applies for the same reason.
+     *
+     * <p>{@code Object} declares {@code wait}, so without this rule {@code Source.call(Point.class, "wait")}
+     * would emit a static call to an instance method of a supertype: source that compiles nowhere and looks
+     * deliberate.
+     */
+    @Test
+    void an_inherited_method_does_not_count_as_declared() {
+        assertThrows(IllegalArgumentException.class, () -> Source.call(java.awt.Point.class, "wait"));
+    }
+
+    @Test
+    void a_missing_type_or_name_is_refused_before_anything_is_emitted() {
+        assertThrows(IllegalArgumentException.class, () -> Source.call(null, "valueOf"));
+        assertThrows(IllegalArgumentException.class, () -> Source.call(String.class, " "));
+    }
+
+    // ---- imports -----------------------------------------------------------------------------------
+
+    /**
+     * {@code Source.imports} is what stops a plugin typing a package path by hand, and the nested case is
+     * why it is not {@code getName()}: an import needs {@code Outer.Inner}, never {@code Outer$Inner}.
+     */
+    @Test
+    void imports_are_the_names_an_import_statement_accepts() {
+        assertArrayEquals(new String[] {"java.awt.Point", "java.util.Map.Entry"},
+                Source.imports(java.awt.Point.class, Map.Entry.class));
+        assertArrayEquals(new String[0], Source.imports());
     }
 }

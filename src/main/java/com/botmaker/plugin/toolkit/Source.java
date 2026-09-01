@@ -3,6 +3,8 @@ package com.botmaker.plugin.toolkit;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 
+import java.util.List;
+
 /**
  * Java source, spelled correctly — the one place a plugin writes an expression a bot will compile.
  *
@@ -15,22 +17,89 @@ import com.palantir.javapoet.CodeBlock;
  * which is what a concern with no owner looks like. A wrong escape is not a compile error in <em>this</em>
  * build; it is a compile error in somebody's <em>bot</em>, reported against a line they did not write.
  *
- * <h2>An argument is source, not a value</h2>
+ * <h2>An argument is source, not a value — and since 2026-09-01 the compiler says so</h2>
  *
- * <p>{@link #newInstance} and {@link #call} take arguments that are already Java: a number, or the text of
- * an expression. To pass a piece of <em>text</em>, wrap it — {@code call(Sound.class, "play",
- * string("ding"))} — because {@code "ding"} and {@code ding} are both valid Java and only the caller knows
- * which was meant. Getting that backwards is the mistake this rule exists to make visible at the call site.
+ * <p>{@link #newInstance} and {@link #call} take arguments that are already Java. The rule used to be
+ * documented and unenforced: the parameter was {@code Object...}, so {@code call(Sound.class, "play",
+ * "ding")} compiled and emitted {@code Sound.play(ding)} — a reference to a variable nobody declared. Both
+ * spellings are valid Java and only the caller knows which was meant, so the distinction has to be in the
+ * type. It is {@link Expr}: {@link #string}, {@link #number} and their friends return one, a bare
+ * {@link String} is not accepted, and the one way to pass unchecked text is {@link #code}, which says at the
+ * call site that the caller took responsibility for it.
+ *
+ * <h2>A method name is checked against the class it is called on</h2>
+ *
+ * <p>{@link #call} resolves {@code method} against {@code type} and refuses a name the class does not
+ * declare. The alternative is source that fails to compile in somebody's <em>bot</em>, reported against a
+ * line they did not write — the same failure mode the escaping above exists to prevent, one level up. The
+ * check degrades rather than throwing when the class cannot be read at all (an optional dependency the host
+ * did not resolve), on the rule this project applies everywhere: no malformed input may be why a project
+ * will not open.
  *
  * <h2>JavaPoet is the implementation and never the interface</h2>
  *
- * <p>Every member here takes and returns {@link String}, so no JavaPoet type reaches a plugin's signature
- * and the library can be replaced without a toolkit release that breaks anybody. A plugin that wants
- * JavaPoet directly is free to declare it.
+ * <p>Every member here takes and returns {@link String} or this class's own {@link Expr}, so no JavaPoet
+ * type reaches a plugin's signature and the library can be replaced without a toolkit release that breaks
+ * anybody. A plugin that wants JavaPoet directly is free to declare it.
  */
 public final class Source {
 
     private Source() {}
+
+    /**
+     * A Java expression, as source text — the type that separates {@code "ding"} from {@code ding}.
+     *
+     * <p>A record with one component rather than a bare {@link String} for exactly one reason, and it is the
+     * whole point: a {@code String} in an argument list is ambiguous and an {@code Expr} is not. It carries
+     * no behaviour, costs one allocation per argument, and {@link #toString()} is the source, so it
+     * concatenates and prints as the text it holds.
+     *
+     * <p>The boundary back to {@link String} is deliberate and stays: {@code ValueCodec.literal} and
+     * {@code SlotContext.replaceWith} take text because text is the wire. Call {@code source()} there.
+     */
+    public record Expr(String source) {
+
+        public Expr {
+            source = source == null || source.isBlank() ? "null" : source;
+        }
+
+        /** The source text, so an {@code Expr} concatenates and prints as what it holds. */
+        @Override
+        public String toString() {
+            return source;
+        }
+    }
+
+    /**
+     * Java source the caller vouches for — the escape hatch, and the only way a raw {@link String} becomes
+     * an argument.
+     *
+     * <p>Named so that it reads as a claim at the call site: {@code call(Wait.class, "time", code(userText))}
+     * says out loud that {@code userText} is an expression rather than something to quote. Everything that
+     * can be built safely has a factory above; reach for this when composing an expression this class does
+     * not model, never to pass a value.
+     */
+    public static Expr code(String javaExpression) {
+        return new Expr(javaExpression);
+    }
+
+    /**
+     * The fully-qualified names of {@code types}, for the {@code importsNeeded} of
+     * {@code SlotContext.replaceWith} and {@code replaceEnclosingCall}.
+     *
+     * <p>The contract keeps imports as text — text is the wire and must stay a {@link String} — so this is
+     * the toolkit's half of the same trade {@link #type} makes: a plugin names real classes and never types
+     * a package path that a rename would silently invalidate. A nested type comes out {@code Outer.Inner},
+     * which is what an import needs and what {@code getName()} does not give.
+     */
+    public static String[] imports(Class<?>... types) {
+        if (types == null) return new String[0];
+        String[] names = new String[types.length];
+        for (int i = 0; i < types.length; i++) {
+            names[i] = type(types[i]);
+        }
+        return names;
+    }
 
     /**
      * {@code text} as a Java string literal, quotes included, always as a <b>single</b> expression.
@@ -43,13 +112,13 @@ public final class Source {
      * literally inside a Java string is escaped, including the control characters a user can paste in
      * without ever seeing them.
      */
-    public static String string(String text) {
+    public static Expr string(String text) {
         String s = text == null ? "" : text;
         StringBuilder out = new StringBuilder(s.length() + 2).append('"');
         for (int i = 0; i < s.length(); i++) {
             out.append(escape(s.charAt(i), '"'));
         }
-        return out.append('"').toString();
+        return new Expr(out.append('"').toString());
     }
 
     /**
@@ -58,8 +127,8 @@ public final class Source {
      * <p>Separate from {@link #string} rather than a parameter of it because what is legal differs by
      * position: a {@code '} must be escaped here and must not be there, and the reverse holds for {@code "}.
      */
-    public static String character(char c) {
-        return "'" + escape(c, '\'') + "'";
+    public static Expr character(char c) {
+        return new Expr("'" + escape(c, '\'') + "'");
     }
 
     /**
@@ -68,15 +137,15 @@ public final class Source {
      * <p>Never {@code 3.0} for a count. The value goes into a bot's source where somebody reads it, and a
      * trailing {@code .0} on a pixel count reads as a unit that was never meant.
      */
-    public static String number(double value) {
-        return value == Math.rint(value) && !Double.isInfinite(value)
+    public static Expr number(double value) {
+        return new Expr(value == Math.rint(value) && !Double.isInfinite(value)
                 ? Long.toString(Math.round(value))
-                : Double.toString(value);
+                : Double.toString(value));
     }
 
     /** A whole number. */
-    public static String number(long value) {
-        return Long.toString(value);
+    public static Expr number(long value) {
+        return new Expr(Long.toString(value));
     }
 
     /**
@@ -86,28 +155,76 @@ public final class Source {
      * import alongside it and the host shortens what it can, while an expression the host chose not to
      * shorten is still correct on its own.
      */
-    public static String enumConstant(Enum<?> constant) {
-        if (constant == null) return "null";
-        return type(constant.getDeclaringClass()) + "." + constant.name();
+    public static Expr enumConstant(Enum<?> constant) {
+        if (constant == null) return new Expr("null");
+        return new Expr(type(constant.getDeclaringClass()) + "." + constant.name());
     }
 
     /**
      * {@code new Type(argument, …)}, with the type fully qualified.
      *
-     * <p>Each argument is <b>Java source</b>, not a value — see the class javadoc. A {@code null} argument
-     * emits the literal {@code null}, which is a real thing to write and not an accident.
+     * <p>Each argument is an {@link Expr} — Java source, not a value. Build one with {@link #string},
+     * {@link #number} and their friends, or with {@link #code} for text the caller vouches for. A
+     * {@code null} argument emits the literal {@code null}, which is a real thing to write and not an
+     * accident.
      */
-    public static String newInstance(Class<?> type, Object... arguments) {
+    public static String newInstance(Class<?> type, Expr... arguments) {
         return CodeBlock.of("new $T($L)", className(type), joined(arguments)).toString();
     }
 
     /**
      * {@code Type.method(argument, …)} — a static call, the shape a call-site editor writes.
      *
-     * <p>Each argument is <b>Java source</b>, exactly as in {@link #newInstance}.
+     * <p>Each argument is an {@link Expr}, exactly as in {@link #newInstance}, and <b>{@code method} is
+     * resolved against {@code type}</b>: a name the class does not declare is refused here rather than
+     * emitted into a bot that then will not compile. See {@link #requireMethod}.
+     *
+     * @throws IllegalArgumentException if {@code type} declares no method called {@code method}
      */
-    public static String call(Class<?> type, String method, Object... arguments) {
+    public static String call(Class<?> type, String method, Expr... arguments) {
+        requireMethod(type, method);
         return CodeBlock.of("$T.$L($L)", className(type), method, joined(arguments)).toString();
+    }
+
+    /**
+     * Refuses {@code method} if {@code type} declares no such name, naming the nearest alternatives.
+     *
+     * <p><b>Declared, not inherited</b>, and public only — the same rule {@code PaletteCatalog} applies, and
+     * for the same reason: a member a facade merely inherits belongs to the supertype that declared it, and
+     * emitting {@code Mouse.wait(…)} because {@link Object} has one is precisely the mistake this check
+     * exists to catch.
+     *
+     * <p><b>It degrades rather than throwing when the class cannot be read at all.</b> A {@link LinkageError}
+     * from {@code getDeclaredMethods()} means a member's signature names something this classloader cannot
+     * see — an optional dependency the host did not resolve — and that is not evidence the caller's method
+     * name is wrong. The rule behind it is the one this project applies everywhere: no unreadable input may
+     * be the reason a project will not open. A genuinely wrong name still fails, later, exactly as it did
+     * before this check existed.
+     */
+    public static void requireMethod(Class<?> type, String method) {
+        if (type == null || method == null || method.isBlank()) {
+            throw new IllegalArgumentException("A call needs a type and a method name.");
+        }
+        java.util.Set<String> declared = new java.util.TreeSet<>();
+        try {
+            for (java.lang.reflect.Method m : type.getDeclaredMethods()) {
+                if (java.lang.reflect.Modifier.isPublic(m.getModifiers())) declared.add(m.getName());
+            }
+        } catch (LinkageError e) {
+            return;
+        }
+        if (declared.contains(method)) return;
+
+        // The nearest names, so the message is actionable: a typo and a rename look identical at the call
+        // site, and "did you mean" is the difference between fixing it now and reading the class.
+        String lower = method.toLowerCase(java.util.Locale.ROOT);
+        List<String> near = declared.stream()
+                .filter(n -> n.toLowerCase(java.util.Locale.ROOT).contains(lower)
+                        || lower.contains(n.toLowerCase(java.util.Locale.ROOT)))
+                .limit(4)
+                .toList();
+        throw new IllegalArgumentException(type.getName() + " declares no public method '" + method + "'"
+                + (near.isEmpty() ? "." : "; did you mean " + String.join(", ", near) + "?"));
     }
 
     /** A type's name as it may be written in an expression, fully qualified. */
@@ -117,21 +234,16 @@ public final class Source {
 
     // ---- internals ------------------------------------------------------------------------------------
 
-    private static CodeBlock joined(Object... arguments) {
+    private static CodeBlock joined(Expr... arguments) {
         if (arguments == null || arguments.length == 0) return CodeBlock.of("");
         CodeBlock.Builder out = CodeBlock.builder();
         for (int i = 0; i < arguments.length; i++) {
-            Object argument = arguments[i];
             out.add(i == 0 ? "" : ", ");
-            // A double is the one shape whose toString() is not what a reader wants (3.0 for a count), so it
-            // goes through number(); everything else is already the source the caller chose.
-            if (argument instanceof Double d) {
-                out.add("$L", number(d));
-            } else if (argument == null) {
-                out.add("null");
-            } else {
-                out.add("$L", argument.toString());
-            }
+            // Every argument is already the source the caller chose — which is the point of Expr. The
+            // instanceof ladder this replaced existed only because the parameter was Object...: a Double had
+            // to be routed through number() so a count did not read as `3.0`, and a String was passed
+            // through verbatim, which is how `play(ding)` got written for `play("ding")`.
+            out.add("$L", arguments[i] == null ? "null" : arguments[i].source());
         }
         return out.build();
     }

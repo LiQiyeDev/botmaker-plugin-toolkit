@@ -198,7 +198,7 @@ public final class Slots {
      * nothing else, so a pasted tab or newline produced a slot that would not compile.
      */
     public static String quote(String text) {
-        return Source.string(text);
+        return Source.string(text).source();
     }
 
     /**
@@ -215,13 +215,13 @@ public final class Slots {
             ctx.set(Values.of(numbers));
             return;
         }
-        Object[] arguments = new Object[numbers.length];
+        Source.Expr[] arguments = new Source.Expr[numbers.length];
         for (int i = 0; i < numbers.length; i++) {
-            arguments[i] = numbers[i];
+            arguments[i] = Source.number(numbers[i]);
         }
-        // Source.type rather than getName(): a nested type is Outer.Inner in both an expression and an
+        // Source.imports rather than getName(): a nested type is Outer.Inner in both an expression and an
         // import, and Outer$Inner in neither.
-        slot.replaceWith(Source.newInstance(type, arguments), Source.type(type));
+        slot.replaceWith(Source.newInstance(type, arguments), Source.imports(type));
     }
 
     /**
