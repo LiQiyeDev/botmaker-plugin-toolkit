@@ -5,7 +5,25 @@ All notable changes to `botmaker-plugin-toolkit`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
-## [Unreleased]
+## [0.1.0] — 2026-09-02
+
+First release. `0.x` because the contract it compiles against is still `0.x`; this module is nothing but
+implementation and is expected to move fast, which is the whole reason it is not part of the contract.
+
+### Declare it at `compile` scope — the host does not supply a copy
+
+**A plugin brings its own toolkit.** `botmaker-studio` deliberately does **not** depend on this module, so
+there is no host copy to fall back on, and `botmaker-cli`'s `pom-scopes` check **refuses** a plugin that
+declares the toolkit `provided`. A plugin either declares it at `compile` scope — which is what
+`botmaker-plugin-archetype` generates — or uses no widget of ours at all, which the same check passes as
+*"contract provided, no toolkit"* and which needs nothing from anybody.
+
+That is what makes the child-first arm of `PluginLoader` mean something: **two plugins may hold two toolkit
+versions**, each resolving its own. A host copy would not take that away — the loader is child-first here —
+but it would silently serve the one plugin that brought none, binding it to *the host's* version rather than
+the one it compiled against, and turning an honest failure to load into a `NoSuchMethodError` deferred to
+whichever method moved. (Studio carried exactly such a copy for five days while it still bundled a plugin of
+its own; it does not any more.)
 
 ### Added
 
@@ -96,6 +114,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   cannot do without: the stylesheet is inside the host's jar, so there is no other way to learn the strings.
 - **`Thumbnail`** — one cell of a picture chooser; a missing image is an ordinary state and renders as the
   label alone.
+- **`ScreenPicks`** — the host's screen overlay (`selectRegion`, `pickPoint`, `sampleColor`) reduced to the
+  shape an editor actually calls it in: hand back a value or leave the slot alone. Cancelling is the common
+  case, so it is the default rather than something every caller writes a branch for.
+- **`ZoomPan`** — pan-and-zoom over a `Node`, for the two modals that show a picture bigger than their own
+  window. Scroll to zoom about the pointer, drag to pan, and a fit-to-window reset — small, but wrong in a
+  different way in each of the three places it had been written.
 
 ### Deliberately absent
 
