@@ -18,23 +18,38 @@ reason there are two modules:
 A plugin takes a new toolkit without taking a new contract. That is the property to protect; if a change
 here would force the contract to move with it, the change is in the wrong module.
 
-**It is the PLUGIN's dependency, and the host resolving a copy of its own is not the disaster this
-paragraph used to claim (corrected 2026-08-28).** What stood here was *"`botmaker-studio` must not list it.
-Two plugins are entitled to two toolkit versions on two classloaders, and the moment Studio resolves one,
-they are not."* The second sentence is **false**, and it is worth knowing why before anybody restores it:
+**It is the PLUGIN's dependency and never the host's — `botmaker-studio` must not list it.** That rule
+stood, was struck on 2026-08-28, and was restored on 2026-09-02. The round trip is worth carrying, because
+the argument that struck it is correct and will be made again.
+
+The original wording was *"Two plugins are entitled to two toolkit versions on two classloaders, and the
+moment Studio resolves one, they are not."* **The second sentence is false**, and nobody should restore it:
 `PluginLoader` is parent-first only for `com.botmaker.plugin.api.**` and the platform namespaces, so the
-toolkit is resolved **child-first** — a plugin carrying its own copy still gets its own, and the host's is
-the fallback for a plugin that brings none.
+toolkit is resolved **child-first** — a plugin carrying its own copy still gets its own.
 
-The rule mattered anyway, and the platform broke it against itself: Studio's plugin #1 is the SDK, whose
-`SdkPlugin` extends `AbstractStudioPlugin` through a dependency the SDK declares `optional` — so not
-transitive, so Studio's classpath had no toolkit at all, so `ServiceLoader` threw `NoClassDefFoundError`
-while constructing the only plugin Studio ships and **Studio ran with an empty palette**. Studio now carries
-the toolkit at **`runtime`** scope. The rule that replaced the old one: *whoever puts a plugin on a
-classpath supplies what that plugin needs.*
+It was struck for a real bug. Studio's plugin #1 was the SDK, whose `SdkPlugin` extends
+`AbstractStudioPlugin` through a dependency the SDK declares `optional` — so not transitive, so Studio's
+classpath had no toolkit at all, so `ServiceLoader` threw `NoClassDefFoundError` while constructing the only
+plugin Studio shipped and **Studio ran with an empty palette**. Studio took a `runtime`-scoped toolkit under
+the replacement rule *whoever puts a plugin on a classpath supplies what that plugin needs*.
 
-What survives of it, and is enforced: **no Studio source may name a `com.botmaker.plugin.toolkit` type.**
-The `runtime` scope means javac cannot see one, and `StudioSourcesTest` refuses a widening to `compile`.
+**On 2026-09-02 Studio stopped bundling a plugin, and that rule stopped applying**: Studio puts no plugin on
+any classpath, so it supplies nothing. The dependency survived one further day on *"the fallback copy for a
+plugin that brings none"*, and **that is the claim to refuse.** Read `botmaker-cli`'s `pom-scopes` check: it
+**refuses** a `provided` toolkit and **passes** a plugin declaring no toolkit at all. So a plugin either
+brings its own at `compile` scope — which is what `botmaker-plugin-archetype` generates — or uses no widget
+of ours and needs nothing. There is no third plugin for a fallback to serve; the only one it would rescue is
+the one the plugin registry rejects, and rescuing it would bind that plugin to **the host's** toolkit version
+rather than the one it compiled against, converting an honest failure to load into a `NoSuchMethodError`
+deferred to whichever method moved.
+
+So the rule is the original one with the false clause replaced by the true one: **not because a host copy
+denies a plugin its own version (it does not), but because there is no plugin it helps and one it silently
+mis-serves.**
+
+Enforced regardless, and unchanged throughout: **no Studio source may name a `com.botmaker.plugin.toolkit`
+type.** `StudioSourcesTest` scans Studio's *source* rather than its classpath, which is what keeps it a real
+test now that the way to break the rule is to add the dependency back rather than widen a scope.
 
 ## What is in here, after the 2026-08-28 lift
 
@@ -86,13 +101,12 @@ its cover art, and the two prompts, which are the only sentences in it that know
 
 **One thing that looks liftable and is not: the SDK's own `SdkValueTypes` still uses its private
 `codec(…)`/`seeded(…)` helpers rather than `Codecs`, and `LiteralWriter` keeps its own escaping rather than
-`Source`.** Not an oversight, and the reason **changed on 2026-08-28** without the conclusion changing. It
-used to be that Studio carried no toolkit, so a toolkit class named from `internal/authoring` — which
-`Authoring` reaches on Studio's *own* classpath — was a `NoClassDefFoundError` on the first project
-generation. Studio carries the toolkit at `runtime` now, so that crash is gone and the rule stands on
-stronger ground: **the SDK is a library *and* a plugin, and only its plugin half (`plugin/`,
-`internal/plugin/`) may name us.** A library half that reached for a plugin's widget kit would be unusable
-in every host that does not happen to bundle one — which is every host but Studio.
+`Source`.** Not an oversight. The crash argument for it came and went — Studio carried no toolkit, then
+briefly did (2026-08-28 to 2026-09-02), and does not again — but the conclusion never depended on it:
+**the SDK is a library *and* a plugin, and only its plugin half (`plugin/`, `internal/plugin/`) may name
+us.** A library half that reached for a plugin's widget kit would be unusable in every host that does not
+happen to bundle one — which, since Studio stopped bundling any plugin at all, is **every host without
+exception**.
 
 So the ~15 lines `Source` and `LiteralWriter` have in common are **deliberate duplication**, and the SDK's
 copy carries a comment saying so.
