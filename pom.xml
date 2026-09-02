@@ -36,10 +36,9 @@
       pom at all — Maven publishes the committed pom, not the effective one.
     -->
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <javafx.version>21</javafx.version>
+        <javafx.version>25.0.4</javafx.version>
         <junit.version>5.10.2</junit.version>
         <javapoet.version>0.7.0</javapoet.version>
         <!-- The reactor/offline value. jitpack.yml injects the released tag from .deps.env at build time. -->

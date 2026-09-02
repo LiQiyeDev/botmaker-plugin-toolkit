@@ -5,6 +5,13 @@ All notable changes to `botmaker-plugin-toolkit`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Changed
+
+- **Compiled for Java 25 (LTS), against JavaFX 25.0.4**, matching the contract. A plugin using these widgets
+  needs a JDK 25 or newer to build and a 25 runtime to load.
+
 ## [0.0.1] — 2026-09-02
 
 First release. `0.x` because the contract it compiles against is still `0.x`; this module is nothing but

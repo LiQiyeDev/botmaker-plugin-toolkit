@@ -5,6 +5,13 @@ reasoning.
 
 ## Done
 
+### 2026-09-02 — JDK 25 LTS and JavaFX 25.0.4
+
+`jitpack.yml` → `openjdk25`, the pom to `maven.compiler.release` 25 (rather than `source`/`target`, which do
+not check against the platform API), `javafx.version` → 25.0.4, CI to `java-version: '25'`. The full account
+of the constellation-wide move — including the JitPack probe that proved `openjdk25` exists before anything
+was touched — is in `../botmaker-studio-api/ROADMAP.md`, dated the same day.
+
 ### 2026-08-28 — the two editor shapes that were written three times
 
 Part F, phase C. Both lifts pass rule 4 the same way: what moved is the **shape**, what stayed is the
