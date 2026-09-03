@@ -5,6 +5,32 @@ reasoning.
 
 ## Done
 
+### 2026-09-04 — `Source.call` is deleted, and the method-reference idea is written down as refused
+
+`Source.call(Class, String method, Expr...)` composed `Type.method(a, b)` with the type fully qualified, and
+checked the method name against the class first. It is gone, with **no caller in its whole life**.
+
+**Why, and it is the rule to apply to the next member proposed here.** It had exactly one candidate caller —
+the SDK's `MacroTranslator` — and that caller **declined it**, in a comment, for a reason the member could
+not have accommodated: a recorded macro is text somebody reads before pasting into a file where the type is
+already imported, so `com.botmaker.sdk.api.interaction.Keyboard.type(…)` is the wrong output. What that
+translator *did* take is `Source.requireMethod`, called directly. **A member whose only candidate caller
+refuses it is a member whose shape was guessed**, and the toolkit's own acceptance test — is this a shape or
+a vocabulary — does not catch that case, because `call` is plainly a shape. It was simply the wrong one.
+
+**The maintainer asked whether a real method reference could replace the `String` method name, and it
+cannot.** `call(Mouse::click)` binds to a functional interface whose *shape matches the method*, so
+arbitrary arity means one interface per parameter count. That is exactly `MemberRef` plus `M0`–`M5`, built
+for `PaletteCatalog` in `botmaker-studio-api` and deleted on 2026-08-27 — and a method reference still
+cannot name a specific overload, which is the other half of what a call-site emitter would need. There is no
+arity-free form. Both `Source`'s class javadoc and `CLAUDE.md` record this, because it is a good idea and
+will be had again.
+
+`SourceTest` 17 → 18: the `call` cases become `requireMethod` cases (declared-not-inherited, the near-miss
+message, the missing type or name), plus one asserting that a name which *does* resolve is accepted — the
+case the old suite never had, because `call` returning source implied it. The `Expr` distinction is now
+asserted through `newInstance`, which is where it still lives. Module total 52.
+
 ### 2026-09-02 — JDK 25 LTS and JavaFX 25.0.4
 
 `jitpack.yml` → `openjdk25`, the pom to `maven.compiler.release` 25 (rather than `source`/`target`, which do

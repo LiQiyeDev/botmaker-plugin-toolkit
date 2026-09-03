@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * error in a <em>bot</em>, reported against a line its author did not write. That is why this is worth
  * asserting where "the builder returned non-null" is not.
  *
- * <p>Since 2026-09-01 two of those wrong answers are refused by javac instead: an argument is a
- * {@link Source.Expr} rather than an {@code Object}, and a method name is resolved against the class it is
- * called on. The cases for both are at the bottom.
+ * <p>Since 2026-09-01 one of those wrong answers is refused by javac instead: an argument is a
+ * {@link Source.Expr} rather than an {@code Object}, so text and an expression cannot be confused. The
+ * cases for it, and for {@link Source#requireMethod}, are at the bottom.
  */
 class SourceTest {
 
@@ -107,16 +108,16 @@ class SourceTest {
     /**
      * The distinction {@link Source.Expr} exists for, in the two spellings that used to be one type.
      *
-     * <p>{@code call(String.class, "valueOf", "name")} no longer compiles — that is the whole point, and
-     * the reason there is no test asserting what it used to emit. Text is {@link Source#string}; an
-     * expression the caller vouches for is {@link Source#code}.
+     * <p>Passing a bare {@code "name"} no longer compiles — that is the whole point, and the reason there is
+     * no test asserting what it used to emit. Text is {@link Source#string}; an expression the caller
+     * vouches for is {@link Source#code}.
      */
     @Test
     void text_and_an_expression_are_different_types_rather_than_different_readings() {
-        assertEquals("java.lang.String.valueOf(\"ding\")",
-                Source.call(String.class, "valueOf", Source.string("ding")));
-        assertEquals("java.lang.String.valueOf(name)",
-                Source.call(String.class, "valueOf", Source.code("name")));
+        assertEquals("new java.awt.Point(\"ding\")",
+                Source.newInstance(java.awt.Point.class, Source.string("ding")));
+        assertEquals("new java.awt.Point(name)",
+                Source.newInstance(java.awt.Point.class, Source.code("name")));
     }
 
     /** An {@code Expr} prints and concatenates as the source it holds, so it drops into a message unchanged. */
@@ -135,10 +136,16 @@ class SourceTest {
 
     // ---- a method name is checked against its class ----------------------------------------------------
 
+    /** The name that resolves is simply accepted, which is the case every other one here is measured from. */
     @Test
-    void a_method_the_class_does_not_declare_is_refused_at_the_call() {
+    void a_method_the_class_declares_is_accepted() {
+        assertDoesNotThrow(() -> Source.requireMethod(String.class, "valueOf"));
+    }
+
+    @Test
+    void a_method_the_class_does_not_declare_is_refused() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> Source.call(String.class, "valueOff", Source.code("x")));
+                () -> Source.requireMethod(String.class, "valueOff"));
         assertTrue(e.getMessage().contains("valueOff"), e.getMessage());
         assertTrue(e.getMessage().contains("valueOf"), "the near miss is worth naming: " + e.getMessage());
     }
@@ -146,19 +153,20 @@ class SourceTest {
     /**
      * Declared, not inherited — the rule {@code PaletteCatalog} applies for the same reason.
      *
-     * <p>{@code Object} declares {@code wait}, so without this rule {@code Source.call(Point.class, "wait")}
-     * would emit a static call to an instance method of a supertype: source that compiles nowhere and looks
-     * deliberate.
+     * <p>{@code Object} declares {@code wait}, so without this rule a caller checking {@code "wait"} against
+     * {@code Point} would be told to go ahead and write a static call to an instance method of a supertype:
+     * source that compiles nowhere and looks deliberate.
      */
     @Test
     void an_inherited_method_does_not_count_as_declared() {
-        assertThrows(IllegalArgumentException.class, () -> Source.call(java.awt.Point.class, "wait"));
+        assertThrows(IllegalArgumentException.class,
+                () -> Source.requireMethod(java.awt.Point.class, "wait"));
     }
 
     @Test
     void a_missing_type_or_name_is_refused_before_anything_is_emitted() {
-        assertThrows(IllegalArgumentException.class, () -> Source.call(null, "valueOf"));
-        assertThrows(IllegalArgumentException.class, () -> Source.call(String.class, " "));
+        assertThrows(IllegalArgumentException.class, () -> Source.requireMethod(null, "valueOf"));
+        assertThrows(IllegalArgumentException.class, () -> Source.requireMethod(String.class, " "));
     }
 
     // ---- imports -----------------------------------------------------------------------------------

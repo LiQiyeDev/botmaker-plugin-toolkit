@@ -19,22 +19,26 @@ import java.util.List;
  *
  * <h2>An argument is source, not a value — and since 2026-09-01 the compiler says so</h2>
  *
- * <p>{@link #newInstance} and {@link #call} take arguments that are already Java. The rule used to be
- * documented and unenforced: the parameter was {@code Object...}, so {@code call(Sound.class, "play",
- * "ding")} compiled and emitted {@code Sound.play(ding)} — a reference to a variable nobody declared. Both
- * spellings are valid Java and only the caller knows which was meant, so the distinction has to be in the
- * type. It is {@link Expr}: {@link #string}, {@link #number} and their friends return one, a bare
- * {@link String} is not accepted, and the one way to pass unchecked text is {@link #code}, which says at the
- * call site that the caller took responsibility for it.
+ * <p>{@link #newInstance} takes arguments that are already Java. The rule used to be documented and
+ * unenforced: the parameter was {@code Object...}, so passing {@code "ding"} emitted {@code ding} — a
+ * reference to a variable nobody declared. Both spellings are valid Java and only the caller knows which was
+ * meant, so the distinction has to be in the type. It is {@link Expr}: {@link #string}, {@link #number} and
+ * their friends return one, a bare {@link String} is not accepted, and the one way to pass unchecked text is
+ * {@link #code}, which says at the call site that the caller took responsibility for it.
  *
- * <h2>A method name is checked against the class it is called on</h2>
+ * <h2>There is no {@code call}, and a method reference is not what replaced it</h2>
  *
- * <p>{@link #call} resolves {@code method} against {@code type} and refuses a name the class does not
- * declare. The alternative is source that fails to compile in somebody's <em>bot</em>, reported against a
- * line they did not write — the same failure mode the escaping above exists to prevent, one level up. The
- * check degrades rather than throwing when the class cannot be read at all (an optional dependency the host
- * did not resolve), on the rule this project applies everywhere: no malformed input may be why a project
- * will not open.
+ * <p>A {@code call(Class<?>, String method, Expr...)} lived here from 2026-08-28 to 2026-09-04 and was
+ * deleted with <b>no production caller</b>: the one place that wanted it — the SDK's macro translator —
+ * declined it, because a recorded macro is pasted into a user's file where the type is imported and
+ * {@code call} qualifies it in full. What is left of it is {@link #requireMethod}, which is the half worth
+ * keeping: anybody composing a call by hand can still ask whether the name resolves.
+ *
+ * <p><b>A compile-checked method reference was considered and is not possible here.</b> {@code call(Mouse::click)}
+ * needs a functional interface whose <em>shape matches the method</em>, so arbitrary arity means one
+ * interface per parameter count — which is exactly the {@code MemberRef} plus {@code M0}–{@code M5}
+ * apparatus this project built for {@code PaletteCatalog} and deleted on 2026-08-27, and a method reference
+ * still cannot name a specific overload. Do not re-propose it without an arity-free form, and there is none.
  *
  * <h2>JavaPoet is the implementation and never the interface</h2>
  *
@@ -173,21 +177,12 @@ public final class Source {
     }
 
     /**
-     * {@code Type.method(argument, …)} — a static call, the shape a call-site editor writes.
-     *
-     * <p>Each argument is an {@link Expr}, exactly as in {@link #newInstance}, and <b>{@code method} is
-     * resolved against {@code type}</b>: a name the class does not declare is refused here rather than
-     * emitted into a bot that then will not compile. See {@link #requireMethod}.
-     *
-     * @throws IllegalArgumentException if {@code type} declares no method called {@code method}
-     */
-    public static String call(Class<?> type, String method, Expr... arguments) {
-        requireMethod(type, method);
-        return CodeBlock.of("$T.$L($L)", className(type), method, joined(arguments)).toString();
-    }
-
-    /**
      * Refuses {@code method} if {@code type} declares no such name, naming the nearest alternatives.
+     *
+     * <p>Call it before writing a static call by hand. It is what survives of the {@code call} member
+     * described in this class's javadoc: the emitting half had no caller, and the checking half is the part
+     * that catches source failing to compile in somebody's <em>bot</em>, reported against a line they did
+     * not write.
      *
      * <p><b>Declared, not inherited</b>, and public only — the same rule {@code PaletteCatalog} applies, and
      * for the same reason: a member a facade merely inherits belongs to the supertype that declared it, and

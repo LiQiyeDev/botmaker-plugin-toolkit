@@ -69,7 +69,7 @@ editor writes to a run *and enforces `minimum()` exactly as the host does* — a
 elements leaves the elements alone and counts no write — so a test can assert that an editor honours the
 floor rather than trusting it. `run()` answers `null` without it, which is what nearly every real slot
 answers and therefore the case an editor must handle first. `SlotRunTest` holds those cases.
-| `Source` (2026-08-28) | Java source: a string literal, a char, a number, a constructor, a static call | a plugin emits Java whether it means to or not — `ValueCodec.literal` and every slot write — and this project already had three hand-rolled escapers, each of which stopped at the backslash and the quote |
+| `Source` (2026-08-28) | Java source: a string literal, a char, a number, an enum constant, a constructor | a plugin emits Java whether it means to or not — `ValueCodec.literal` and every slot write — and this project already had three hand-rolled escapers, each of which stopped at the backslash and the quote |
 | `ZoomPan` (2026-08-30) | Ctrl+scroll zoom about the cursor and middle-drag pan, as event **filters** over a `Pane` and a content `Group` | it names no capture target, no colour and nothing of any plugin's API — it is a gesture, which is the definition of a shape. Written in Studio, held in the SDK for two slices because Studio source may not name a toolkit type, and moved the moment both its callers were the SDK's |
 
 **`Styles.UNTHEMED` arrived with `ZoomPan` and is the first style class here that is an *opt-out*.** The host
@@ -151,6 +151,20 @@ plugin". This project had already written three of those (here, in the SDK, and 
 and each of them escaped the backslash and the quote and stopped, so a pasted tab produced a slot that would
 not compile.
 
+**`Source.call` was deleted on 2026-09-04, and the reason is the rule to apply to the next member proposed
+here.** It composed `Type.method(a, b)` and checked the method name reflectively, and it had **no production
+caller in its whole life**: the one place that wanted it — the SDK's `MacroTranslator` — declined it, because
+a recorded macro is text somebody reads before pasting into a file where the type is already imported, and
+`call` qualifies the type in full. A member with one candidate caller that refuses it is a member whose shape
+was guessed. What survives is `Source.requireMethod`, which is the half that was actually used, called
+directly by that translator.
+
+**A compile-checked method reference was raised as the replacement and is not possible.** `call(Mouse::click)`
+binds to a functional interface whose *shape matches the method*, so arbitrary arity needs one interface per
+parameter count — precisely the `MemberRef` + `M0`–`M5` apparatus built for `PaletteCatalog` and deleted on
+2026-08-27, and a method reference still cannot name a specific overload. There is no arity-free form. Both
+`Source`'s javadoc and this paragraph say so, because the idea is a good one and will be had again.
+
 **`Source.string` is the one member JavaPoet does not implement**, and that is pinned by a test rather than
 left to be rediscovered: `$S` splits a string containing a newline into a concatenation *across source
 lines*, which is right for a generated file and wrong for a slot, where the host writes the result into the
@@ -186,7 +200,8 @@ mistake it exists to prevent — that a bare `TextField` loses edits made by cli
 ## Building
 
 ```bash
-mvn test        # ValuesTest, CallSitesTest, SourceTest (29) — what is assertable with no JavaFX toolkit
+mvn test        # ValuesTest, CallSitesTest, SourceTest, SlotRunTest, TupleLabelTest (52) — what is
+                # assertable with no JavaFX toolkit
 mvn install     # com.github.LiQiyeDev:botmaker-plugin-toolkit:0.0.0-SNAPSHOT
 ```
 

@@ -5,6 +5,21 @@ All notable changes to `botmaker-plugin-toolkit`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Removed
+
+- **`Source.call(Class, String, Expr...)`**, which composed `Type.method(a, b)` with the type fully
+  qualified. It had **no caller in its whole life**: the one place that wanted it declined it, because the
+  text it produces is read by a person before being pasted into a file where the type is already imported.
+  `Source.requireMethod` — the half that *was* used, to check a method name against its class — is unchanged
+  and still public, so composing a call by hand is exactly as safe as it was.
+
+  A compile-checked method reference (`call(Mouse::click)`) was considered as the replacement and is not
+  possible: a method reference binds to a functional interface whose shape matches the method, so arbitrary
+  arity needs one interface per parameter count, and it still could not name a specific overload. `Source`'s
+  own javadoc records this so it is not re-proposed.
+
 ## [0.0.2] — 2026-09-02
 
 ### Changed
