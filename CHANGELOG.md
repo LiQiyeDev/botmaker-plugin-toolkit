@@ -7,6 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- **This module is resolvable from JitPack again**, and so is the contract it compiles against. Neither pom
+  pinned `maven-compiler-plugin`, and JitPack's Maven defaults it to 3.1 — which predates
+  `maven.compiler.release` and builds with `source 5` (`Source option 5 is no longer supported`). From
+  2026-09-02 to 2026-09-04 `botmaker-studio-api` did not build there, so this module could not resolve it
+  and `v0.0.2` was never published either. Both are pinned to 3.13.0 now.
+
 ### Removed
 
 - **`Source.call(Class, String, Expr...)`**, which composed `Type.method(a, b)` with the type fully
