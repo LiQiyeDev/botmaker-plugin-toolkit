@@ -132,7 +132,15 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.6.0</version>
+                <!-- Held at 1.4.1 for JitPack, NOT stale: 1.5.0 declares a Maven 3.5.4 prerequisite and
+                     1.6.0 declares 3.6.3, and JitPack's build image runs older than 3.6.3. botmaker-session
+                     and botmaker-sdk have carried this comment since v0.0.7/v1.0.25 were burned finding it
+                     out; this module was written later and copied 1.6.0, so v0.0.4 died the same death
+                     ("The plugin org.codehaus.mojo:flatten-maven-plugin:1.6.0 requires Maven version
+                     3.6.3", build failed before it published anything). 1.4.1 needs only 3.2.5 and supports
+                     the same flattenMode and pomElements config used here. Do not bump without proving
+                     JitPack's mvn version. -->
+                <version>1.4.1</version>
                 <configuration>
                     <flattenMode>oss</flattenMode>
                     <pomElements>

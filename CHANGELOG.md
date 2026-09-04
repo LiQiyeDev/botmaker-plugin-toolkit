@@ -5,6 +5,24 @@ All notable changes to `botmaker-plugin-toolkit`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Fixed
+
+- **`0.0.4` failed on JitPack too, on a third plugin.** The compiler pin it added was correct; this pom also
+  pinned `flatten-maven-plugin` at **1.6.0**, which declares a Maven 3.6.3 prerequisite, and JitPack's
+  builder runs **Apache Maven 3.6.1**. Maven refuses to execute such a plugin at all —
+  `The plugin org.codehaus.mojo:flatten-maven-plugin:1.6.0 requires Maven version 3.6.3` — before anything
+  is published. Pinned to **1.4.1**, which is what `botmaker-session` and `botmaker-sdk` have carried since
+  2026-08-22, with the comment that explains it; this module was written later and copied the version
+  instead of the reason.
+- **The umbrella's `release.sh` now refuses this class of tag before it is pushed.** `check_jitpack_plugins`
+  reads every pinned plugin's own pom for its `<prerequisites><maven>` and stops the release if any exceeds
+  JitPack's 3.6.1. It reads the prerequisite rather than keeping a list, so it covers the plugin nobody has
+  hit yet — and it found one immediately, `maven-shade-plugin` 3.5.3 in `botmaker-cli`.
+
+  Use `0.0.5`; `0.0.4` was never published.
+
 ## [0.0.4] — 2026-09-04
 
 ### Fixed
